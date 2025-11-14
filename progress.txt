@@ -1,0 +1,26 @@
+## TASK-006: Frontend auth pages — DONE (2025-11-14)
+
+### What was done:
+- Created `frontend/src/components/AuthLayout.tsx` — centered card layout for auth pages with gradient background
+- Implemented full `frontend/src/pages/LoginPage.tsx`:
+  - react-hook-form + zod schema validation (email format, password ≥8 chars)
+  - Calls POST /api/auth/login, saves token+user to authStore, redirects to /dashboard
+  - Handles 401 (wrong credentials), 429 (rate limit), generic errors
+- Implemented full `frontend/src/pages/RegisterPage.tsx`:
+  - react-hook-form + zod (name, email, password ≥8 chars)
+  - Calls POST /api/auth/register, on success logs in and redirects to /dashboard
+  - Handles 409 Conflict (email taken), 400 validation errors
+- `src/api/client.ts` was already complete (axios + Bearer interceptor + auto-refresh on 401)
+- `authStore.ts` was already complete (zustand persist — user, accessToken, isAuthenticated)
+- `routes/index.tsx` was already complete (ProtectedRoute → redirect to /login)
+
+### Files changed:
+- frontend/src/components/AuthLayout.tsx (new)
+- frontend/src/pages/LoginPage.tsx (implemented)
+- frontend/src/pages/RegisterPage.tsx (implemented)
+- tasks.json (TASK-006 status → done)
+
+### Notes for next iteration:
+- Next priority: TASK-009 (high) — Dashboard page with polls list (depends on TASK-006 ✓, TASK-007 ✓)
+- TASK-009 needs: DashboardPage with poll cards, loading skeletons, delete confirmation dialog
+- Backend API for polls is at GET /api/polls, DELETE /api/polls/:id, POST /api/polls/:id/copy

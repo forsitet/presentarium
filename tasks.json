@@ -155,7 +155,7 @@
         "Шаг 6: нажать кнопку «Выйти» → переход на /login, токен очищен"
       ],
       "dependencies": ["TASK-004", "TASK-005"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-007",
