@@ -421,6 +421,50 @@
 
 ---
 
+## TASK-028: Backend session history — list, detail, participants, answers — DONE (2025-11-28)
+
+### What was done:
+- Extended `backend/internal/repository/session_repo.go`:
+  - Added `SessionSummaryRow` and `SessionWithPollRow` structs
+  - Added `ListByUser(ctx, userID)` — GROUP BY query with COUNT/AVG aggregation
+  - Added `GetByIDWithPoll(ctx, sessionID)` — JOIN with polls for ownership check
+- Extended `backend/internal/repository/answer_repo.go`:
+  - Added `AnswerExportRow` struct with json tags
+  - Added json tags to existing `LeaderboardRow` (snake_case for HTTP consistency)
+  - Added `DistributionByQuestion(ctx, questionID, sessionID)` — GROUP BY answer::text
+  - Added `ListExportBySession(ctx, sessionID)` — JOIN participants+questions for full export
+- Created `backend/internal/service/history_service.go`:
+  - `HistoryService` interface with 4 methods
+  - `ListSessions` — converts repo rows to `SessionSummaryResponse`
+  - `GetSession` — ownership check, computes avg score, gets leaderboard, per-question distributions
+  - `ListParticipants` — ownership check, returns participants with scores
+  - `ListAnswers` — ownership check, delegates to repo
+- Created `backend/internal/handler/session_handler.go`:
+  - `GET /api/sessions` → list with participant_count and average_score
+  - `GET /api/sessions/:id` → detail with leaderboard and per-question stats+distribution
+  - `GET /api/sessions/:id/participants` → participants with total_score
+  - `GET /api/sessions/:id/answers` → raw answers for export/analysis
+- Updated `backend/internal/handler/routes.go`: added `HistoryService` to RouterDeps, wired routes
+- Updated `backend/cmd/server/main.go`: created and wired `historySvc`
+
+### Files changed:
+- backend/internal/repository/session_repo.go (ListByUser, GetByIDWithPoll)
+- backend/internal/repository/answer_repo.go (DistributionByQuestion, ListExportBySession, json tags)
+- backend/internal/service/history_service.go (new)
+- backend/internal/handler/session_handler.go (new)
+- backend/internal/handler/routes.go (HistoryService in RouterDeps + routes)
+- backend/cmd/server/main.go (wire historySvc)
+- tasks.json (TASK-028 status → done)
+
+### Notes for next iteration:
+- TASK-029 (frontend history page) — now unblocked (depends on TASK-028 ✓, TASK-009 ✓)
+- TASK-030 (CSV export backend) — now unblocked (depends on TASK-028 ✓)
+- TASK-023 (frontend word cloud) — medium priority, all deps done
+- TASK-025 (frontend brainstorm UI) — medium priority, all deps done
+- TASK-027 (manual moderation backend) — medium priority, all deps done
+
+---
+
 ## TASK-036: Nginx reverse proxy — dev & prod — DONE (2026-02-14)
 
 ### What was done:
