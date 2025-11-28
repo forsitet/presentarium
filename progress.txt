@@ -87,3 +87,33 @@
 - TASK-015 needs: HostSessionPage in 'waiting' state, QR code, participant list via WebSocket, "Start" button
 - TASK-016 (JoinPage) depends on TASK-014 ✓ and TASK-015, also ready after TASK-015
 - TASK-035 (Backend middleware) is also high priority and fully ready (depends on TASK-005 ✓ only)
+
+---
+
+## TASK-015: Host waiting screen — DONE (2026-03-10)
+
+### What was done:
+- Added API functions to `frontend/src/api/polls.ts`: `getRoomParticipants`, `changeRoomState`, `getRoomInfo`
+- Created `frontend/src/stores/sessionStore.ts`: Zustand store managing roomCode, pollId, roomStatus, participants, currentQuestion, leaderboard, answerCount with full CRUD actions
+- Created `frontend/src/components/ParticipantList.tsx`: shows participant avatars with initials, empty-state prompt, participant count badge
+- Implemented full `frontend/src/pages/HostSessionPage.tsx` (waiting state):
+  - Connects to WebSocket as organizer (JWT token passed to socket.connect)
+  - Loads initial participants via GET /api/rooms/:code/participants
+  - Listens for `participant_joined` / `participant_left` WS events
+  - Displays 6-digit room code in large monospace font
+  - QR code via `qrcode.react` (QRCodeSVG) pointing to `/join/:code`
+  - Copy-link button with clipboard API and "✓ Скопировано!" feedback
+  - "Начать опрос (N)" button — disabled when 0 participants, calls PATCH /api/rooms/:code/state { action: 'start' }
+  - Cleans up WS handlers and disconnects on unmount
+
+### Files changed:
+- frontend/src/api/polls.ts (extended with 3 new functions)
+- frontend/src/stores/sessionStore.ts (new)
+- frontend/src/components/ParticipantList.tsx (new)
+- frontend/src/pages/HostSessionPage.tsx (full implementation)
+- tasks.json (TASK-015 status → done)
+
+### Notes for next iteration:
+- Next: TASK-016 (high) — JoinPage for participants (depends on TASK-014 ✓, TASK-015 ✓)
+- TASK-016 needs: code input, name input, WS connect as participant, session_token in localStorage, auto-reconnect, waiting screen after join
+- TASK-020 (HostSessionPage quiz state) and TASK-021 (participant quiz screen) become unblocked once TASK-016 is done

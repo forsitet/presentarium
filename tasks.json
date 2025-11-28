@@ -365,7 +365,7 @@
         "Шаг 5: скопировать ссылку → ссылка вида https://localhost/join/:code"
       ],
       "dependencies": ["TASK-006", "TASK-014"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-016",
