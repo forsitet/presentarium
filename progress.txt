@@ -413,8 +413,36 @@
 - tasks.json (TASK-039 status → done)
 
 ### Notes for next iteration:
-- TASK-036 (Nginx reverse proxy, high) — all deps done (TASK-002 ✓, TASK-004 ✓)
+- TASK-036 ✓ DONE
 - TASK-040 (integration tests) — now unblocked (depends on TASK-039 ✓)
 - TASK-027 (manual moderation backend) — medium priority, all deps done
+- TASK-023 (frontend word cloud) — medium, all deps done
+- TASK-025 (frontend brainstorm UI) — medium, all deps done
+
+---
+
+## TASK-036: Nginx reverse proxy — dev & prod — DONE (2026-02-14)
+
+### What was done:
+- Updated `nginx/nginx.conf` (dev): added `gzip_vary on`, `gzip_proxied any`, `gzip_comp_level 6`, expanded gzip_types (fonts, text/javascript)
+- Created `frontend/nginx.conf`: SPA routing via `try_files $uri $uri/ /index.html`, long-term cache headers for static assets
+- Created `frontend/Dockerfile`: multi-stage — `node:20-alpine AS builder` (npm ci + npm run build) → `nginx:1.25-alpine` (serves dist/), with HEALTHCHECK
+- Created `nginx/nginx.prod.conf`: full prod reverse proxy — gzip with `gzip_vary`, `/uploads/` served by nginx directly with 30d cache, `/api/` → backend with proxy headers, `/ws/` → backend with WebSocket upgrade + 3600s read_timeout, `/` → frontend:80 nginx
+- Created `docker-compose.prod.yml`: postgres + backend + frontend + nginx services; no source volume mounts; health checks on all services; nginx depends on backend+frontend being healthy
+- Fixed `backend/Dockerfile`: added `COPY --from=builder /app/pkg/badwords/badwords.json pkg/badwords/badwords.json` to include runtime file in final image
+
+### Files changed:
+- nginx/nginx.conf (gzip improvements)
+- frontend/nginx.conf (new — SPA routing for frontend container)
+- frontend/Dockerfile (new — multi-stage builder + nginx)
+- nginx/nginx.prod.conf (new — prod reverse proxy config)
+- docker-compose.prod.yml (new — production compose)
+- backend/Dockerfile (added badwords.json to final image)
+- tasks.json (TASK-036 status → done)
+
+### Notes for next iteration:
+- TASK-037 (Docker multi-stage for prod) — now unblocked (depends on TASK-036 ✓); verify backend image < 30 MB, add more health checks polish
+- TASK-040 (integration tests) — unblocked (depends on TASK-039 ✓)
+- TASK-027 (manual moderation backend) — medium, all deps done
 - TASK-023 (frontend word cloud) — medium, all deps done
 - TASK-025 (frontend brainstorm UI) — medium, all deps done

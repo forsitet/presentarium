@@ -68,6 +68,7 @@ func main() {
 	roomSvc := service.NewRoomService(sessionRepo, pollRepo, hub)
 	participantSvc := service.NewParticipantService(participantRepo, sessionRepo, hub)
 	conductSvc := service.NewConductService(questionRepo, sessionRepo, pollRepo, answerRepo, brainstormRepo, hub)
+	historySvc := service.NewHistoryService(sessionRepo, answerRepo, participantRepo, questionRepo)
 
 	router := handler.NewRouter(handler.RouterDeps{
 		AuthService:         authSvc,
@@ -76,6 +77,7 @@ func main() {
 		RoomService:         roomSvc,
 		ParticipantService:  participantSvc,
 		ConductService:      conductSvc,
+		HistoryService:      historySvc,
 		WSHandler:           wsHandler,
 		JWTSecret:           cfg.JWTSecret,
 		RefreshTokenTTLDays: cfg.JWTRefreshTokenTTL,

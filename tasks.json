@@ -848,7 +848,7 @@
         "Шаг 5: curl -H 'Accept-Encoding: gzip' http://localhost/ → Content-Encoding: gzip"
       ],
       "dependencies": ["TASK-002", "TASK-004"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-037",
