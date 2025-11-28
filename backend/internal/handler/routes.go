@@ -22,6 +22,7 @@ type RouterDeps struct {
 	RoomService         service.RoomService
 	ParticipantService  service.ParticipantService
 	ConductService      service.ConductService
+	HistoryService      service.HistoryService
 	WSHandler           *ws.Handler
 	JWTSecret           string
 	RefreshTokenTTLDays int
@@ -72,6 +73,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 	roomH := newRoomHandler(deps.RoomService, deps.ConductService)
 	participantH := newParticipantHandler(deps.ParticipantService)
 	uploadH := newUploadHandler(deps.UploadsDir)
+	sessionH := newSessionHandler(deps.HistoryService)
 
 	r.Route("/api", func(r chi.Router) {
 		r.Route("/auth", func(r chi.Router) {
@@ -116,6 +118,14 @@ func NewRouter(deps RouterDeps) http.Handler {
 				r.Get("/{code}", roomH.handleGet)
 				r.Patch("/{code}/state", roomH.handleChangeState)
 				r.Get("/{code}/participants", participantH.handleList)
+			})
+
+			// Session history routes (read-only, organizer-owned)
+			r.Route("/sessions", func(r chi.Router) {
+				r.Get("/", sessionH.handleList)
+				r.Get("/{id}", sessionH.handleGet)
+				r.Get("/{id}/participants", sessionH.handleListParticipants)
+				r.Get("/{id}/answers", sessionH.handleListAnswers)
 			})
 		})
 	})

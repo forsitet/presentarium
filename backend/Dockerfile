@@ -10,5 +10,6 @@ FROM alpine:3.19
 RUN apk --no-cache add ca-certificates tzdata
 WORKDIR /app
 COPY --from=builder /app/server .
+COPY --from=builder /app/pkg/badwords/badwords.json pkg/badwords/badwords.json
 EXPOSE 8080
 CMD ["./server"]

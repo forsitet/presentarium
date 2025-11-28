@@ -15,9 +15,19 @@ import (
 
 // LeaderboardRow holds aggregated score data for a single participant.
 type LeaderboardRow struct {
-	ParticipantID uuid.UUID `db:"id"`
-	Name          string    `db:"name"`
-	TotalScore    int       `db:"total_score"`
+	ParticipantID uuid.UUID `db:"id"         json:"participant_id"`
+	Name          string    `db:"name"        json:"name"`
+	TotalScore    int       `db:"total_score" json:"total_score"`
+}
+
+// AnswerExportRow holds joined data for answer export (participant + question + answer).
+type AnswerExportRow struct {
+	ParticipantName string          `db:"participant_name" json:"participant_name"`
+	QuestionText    string          `db:"question_text"    json:"question_text"`
+	Answer          json.RawMessage `db:"answer"           json:"answer"`
+	IsCorrect       *bool           `db:"is_correct"       json:"is_correct"`
+	Score           int             `db:"score"            json:"score"`
+	ResponseTimeMs  int             `db:"response_time_ms" json:"response_time_ms"`
 }
 
 // AnswerRepository defines data access for participant answers.
@@ -32,6 +42,10 @@ type AnswerRepository interface {
 	GetLeaderboard(ctx context.Context, sessionID uuid.UUID) ([]LeaderboardRow, error)
 	// UpdateParticipantScore increments the participant's total_score by delta.
 	UpdateParticipantScore(ctx context.Context, participantID uuid.UUID, delta int) error
+	// DistributionByQuestion returns a map of answer value (JSON text) → count for non-hidden answers.
+	DistributionByQuestion(ctx context.Context, questionID, sessionID uuid.UUID) (map[string]int, error)
+	// ListExportBySession returns all answers in a session joined with participant and question data.
+	ListExportBySession(ctx context.Context, sessionID uuid.UUID) ([]AnswerExportRow, error)
 }
 
 type postgresAnswerRepo struct {
@@ -120,4 +134,48 @@ func (r *postgresAnswerRepo) UpdateParticipantScore(ctx context.Context, partici
 		`UPDATE participants SET total_score = total_score + $2 WHERE id = $1`,
 		participantID, delta)
 	return err
+}
+
+type distributionRow struct {
+	Key string `db:"key"`
+	Cnt int    `db:"cnt"`
+}
+
+func (r *postgresAnswerRepo) DistributionByQuestion(ctx context.Context, questionID, sessionID uuid.UUID) (map[string]int, error) {
+	var rows []distributionRow
+	err := r.db.SelectContext(ctx, &rows,
+		`SELECT answer::text AS key, COUNT(*)::int AS cnt
+		 FROM answers
+		 WHERE question_id = $1 AND session_id = $2 AND is_hidden = false
+		 GROUP BY answer::text`,
+		questionID, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	dist := make(map[string]int, len(rows))
+	for _, row := range rows {
+		dist[row.Key] = row.Cnt
+	}
+	return dist, nil
+}
+
+func (r *postgresAnswerRepo) ListExportBySession(ctx context.Context, sessionID uuid.UUID) ([]AnswerExportRow, error) {
+	var rows []AnswerExportRow
+	err := r.db.SelectContext(ctx, &rows,
+		`SELECT pt.name AS participant_name,
+		        q.text  AS question_text,
+		        a.answer,
+		        a.is_correct,
+		        a.score,
+		        a.response_time_ms
+		 FROM answers a
+		 JOIN participants pt ON pt.id = a.participant_id
+		 JOIN questions q    ON q.id  = a.question_id
+		 WHERE a.session_id = $1
+		 ORDER BY pt.name ASC, q.position ASC`,
+		sessionID)
+	if err != nil {
+		return nil, err
+	}
+	return rows, nil
 }
