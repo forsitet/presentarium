@@ -1,5 +1,5 @@
 import { apiClient } from './client'
-import type { Poll, Question } from '../types'
+import type { Poll, Question, Participant, Session } from '../types'
 
 export async function getPolls(): Promise<Poll[]> {
   const res = await apiClient.get<Poll[]>('/polls')
@@ -71,4 +71,21 @@ export async function reorderQuestions(
   order: Array<{ id: string; position: number }>,
 ): Promise<void> {
   await apiClient.patch(`/polls/${pollId}/questions/reorder`, order)
+}
+
+export async function getRoomInfo(code: string): Promise<Session> {
+  const res = await apiClient.get<Session>(`/rooms/${code}`)
+  return res.data
+}
+
+export async function getRoomParticipants(code: string): Promise<Participant[]> {
+  const res = await apiClient.get<Participant[]>(`/rooms/${code}/participants`)
+  return res.data
+}
+
+export async function changeRoomState(
+  code: string,
+  action: 'start' | 'end' | 'next_question' | 'end_question',
+): Promise<void> {
+  await apiClient.patch(`/rooms/${code}/state`, { action })
 }
