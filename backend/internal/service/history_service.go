@@ -58,6 +58,17 @@ type ParticipantResultResponse struct {
 	JoinedAt   time.Time  `json:"joined_at"`
 }
 
+// ParticipantHistorySummary is returned for a participant's session result by token.
+type ParticipantHistorySummary struct {
+	SessionID         string     `json:"session_id"`
+	PollTitle         string     `json:"poll_title"`
+	StartedAt         *time.Time `json:"started_at"`
+	FinishedAt        *time.Time `json:"finished_at"`
+	TotalScore        int        `json:"total_score"`
+	MyRank            int        `json:"my_rank"`
+	TotalParticipants int        `json:"total_participants"`
+}
+
 // HistoryService exposes read-only session history for organizers.
 type HistoryService interface {
 	ListSessions(ctx context.Context, userID uuid.UUID) ([]SessionSummaryResponse, error)
@@ -65,6 +76,8 @@ type HistoryService interface {
 	ListParticipants(ctx context.Context, userID, sessionID uuid.UUID) ([]ParticipantResultResponse, error)
 	ListAnswers(ctx context.Context, userID, sessionID uuid.UUID) ([]repository.AnswerExportRow, error)
 	ExportCSV(ctx context.Context, userID, sessionID uuid.UUID) ([]repository.AnswerExportRow, *time.Time, error)
+	// GetParticipantHistory returns session summary for a participant identified by session_token.
+	GetParticipantHistory(ctx context.Context, sessionToken uuid.UUID) (*ParticipantHistorySummary, error)
 }
 
 type historyService struct {
@@ -231,4 +244,20 @@ func (s *historyService) ExportCSV(ctx context.Context, userID, sessionID uuid.U
 		return nil, nil, err
 	}
 	return answers, row.FinishedAt, nil
+}
+
+func (s *historyService) GetParticipantHistory(ctx context.Context, sessionToken uuid.UUID) (*ParticipantHistorySummary, error) {
+	row, err := s.sessionRepo.GetByParticipantToken(ctx, sessionToken)
+	if err != nil {
+		return nil, err
+	}
+	return &ParticipantHistorySummary{
+		SessionID:         row.SessionID.String(),
+		PollTitle:         row.PollTitle,
+		StartedAt:         row.StartedAt,
+		FinishedAt:        row.FinishedAt,
+		TotalScore:        row.TotalScore,
+		MyRank:            row.MyRank,
+		TotalParticipants: row.TotalParticipants,
+	}, nil
 }
