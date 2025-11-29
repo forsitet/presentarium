@@ -176,6 +176,31 @@ func (h *sessionHandler) handleExportCSV(w http.ResponseWriter, r *http.Request)
 	cw.Flush()
 }
 
+// handleGetByParticipantToken returns session summary for a participant by their session_token query param.
+// This is a public endpoint — no JWT required.
+func (h *sessionHandler) handleGetByParticipantToken(w http.ResponseWriter, r *http.Request) {
+	tokenStr := r.URL.Query().Get("session_token")
+	if tokenStr == "" {
+		writeError(w, http.StatusBadRequest, "session_token query param required")
+		return
+	}
+	token, err := uuid.Parse(tokenStr)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid session_token")
+		return
+	}
+	summary, err := h.historySvc.GetParticipantHistory(r.Context(), token)
+	if err != nil {
+		if errors.Is(err, errs.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "session not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "failed to get session")
+		return
+	}
+	writeJSON(w, http.StatusOK, summary)
+}
+
 // answerToString converts a JSON answer value to a human-readable string.
 // Quoted JSON strings are unquoted; other JSON values are left as-is.
 func answerToString(raw json.RawMessage) string {

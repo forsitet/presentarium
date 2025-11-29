@@ -43,6 +43,12 @@ func NewRouter(deps RouterDeps) http.Handler {
 
 	r.Get("/health", healthHandler)
 
+	// Public participant history endpoint (no JWT required).
+	if deps.HistoryService != nil {
+		sessionHPublic := newSessionHandler(deps.HistoryService)
+		r.Get("/api/sessions/by-token", sessionHPublic.handleGetByParticipantToken)
+	}
+
 	// Serve uploaded files (images) from the uploads directory.
 	uploadsAbsDir := filepath.Clean(deps.UploadsDir)
 	r.Handle("/uploads/*", http.StripPrefix("/uploads/", http.FileServer(http.Dir(uploadsAbsDir))))

@@ -40,6 +40,17 @@ type SessionWithPollRow struct {
 	CreatedAt  time.Time  `db:"created_at"`
 }
 
+// ParticipantSessionSummaryRow holds session data for a single participant's result.
+type ParticipantSessionSummaryRow struct {
+	SessionID         uuid.UUID  `db:"session_id"`
+	PollTitle         string     `db:"poll_title"`
+	StartedAt         *time.Time `db:"started_at"`
+	FinishedAt        *time.Time `db:"finished_at"`
+	TotalScore        int        `db:"total_score"`
+	MyRank            int        `db:"my_rank"`
+	TotalParticipants int        `db:"total_participants"`
+}
+
 // SessionRepository defines data access for sessions.
 type SessionRepository interface {
 	Create(ctx context.Context, session *model.Session) error
@@ -50,6 +61,8 @@ type SessionRepository interface {
 	ListByUser(ctx context.Context, userID uuid.UUID) ([]SessionSummaryRow, error)
 	// GetByIDWithPoll returns a session joined with its poll's title and user_id.
 	GetByIDWithPoll(ctx context.Context, sessionID uuid.UUID) (*SessionWithPollRow, error)
+	// GetByParticipantToken returns session summary for the participant identified by session_token.
+	GetByParticipantToken(ctx context.Context, sessionToken uuid.UUID) (*ParticipantSessionSummaryRow, error)
 }
 
 type postgresSessionRepo struct {
@@ -144,6 +157,32 @@ func (r *postgresSessionRepo) GetByIDWithPoll(ctx context.Context, sessionID uui
 		JOIN polls p ON p.id = s.poll_id
 		WHERE s.id = $1`
 	err := r.db.GetContext(ctx, &row, query, sessionID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, errs.ErrNotFound
+		}
+		return nil, err
+	}
+	return &row, nil
+}
+
+func (r *postgresSessionRepo) GetByParticipantToken(ctx context.Context, sessionToken uuid.UUID) (*ParticipantSessionSummaryRow, error) {
+	var row ParticipantSessionSummaryRow
+	query := `
+		SELECT
+			s.id AS session_id,
+			p.title AS poll_title,
+			s.started_at,
+			s.finished_at,
+			pt.total_score,
+			(SELECT COUNT(*) + 1 FROM participants pt2
+			 WHERE pt2.session_id = pt.session_id AND pt2.total_score > pt.total_score)::int AS my_rank,
+			(SELECT COUNT(*) FROM participants pt3 WHERE pt3.session_id = pt.session_id)::int AS total_participants
+		FROM participants pt
+		JOIN sessions s ON s.id = pt.session_id
+		JOIN polls p ON p.id = s.poll_id
+		WHERE pt.session_token = $1`
+	err := r.db.GetContext(ctx, &row, query, sessionToken)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, errs.ErrNotFound
