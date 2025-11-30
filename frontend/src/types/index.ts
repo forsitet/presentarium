@@ -54,3 +54,30 @@ export interface LeaderboardEntry {
   name: string
   score: number
 }
+
+export interface SessionSummary {
+  id: string
+  poll_id: string
+  poll_title: string
+  room_code: string
+  status: string
+  participant_count: number
+  average_score: number
+  started_at?: string
+  finished_at?: string
+  created_at: string
+}
+
+export interface QuestionStat {
+  id: string
+  text: string
+  type: string
+  points: number
+  total_answers: number
+  answer_distribution?: Record<string, number>
+}
+
+export interface SessionDetail extends SessionSummary {
+  leaderboard: LeaderboardEntry[]
+  questions: QuestionStat[]
+}
