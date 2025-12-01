@@ -81,3 +81,13 @@ export interface SessionDetail extends SessionSummary {
   leaderboard: LeaderboardEntry[]
   questions: QuestionStat[]
 }
+
+export interface ParticipantHistorySummary {
+  session_id: string
+  poll_title: string
+  started_at?: string
+  finished_at?: string
+  total_score: number
+  my_rank: number
+  total_participants: number
+}

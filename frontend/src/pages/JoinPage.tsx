@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -132,6 +132,15 @@ export function JoinPage() {
             {errors.name && (
               <p className="text-red-600 text-sm mt-1">{errors.name.message}</p>
             )}
+          </div>
+
+          <div className="text-center">
+            <Link
+              to="/my-results"
+              className="text-sm text-indigo-600 hover:text-indigo-800 underline"
+            >
+              Моя история результатов
+            </Link>
           </div>
 
           <button
