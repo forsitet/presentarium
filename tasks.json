@@ -999,7 +999,7 @@
         "Шаг 4: пройти два опроса → оба отображаются в истории"
       ],
       "dependencies": ["TASK-028", "TASK-034"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-044",

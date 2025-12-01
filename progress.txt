@@ -861,7 +861,7 @@
 
 ### Notes for next iteration:
 - Pending tasks by priority:
-  - TASK-043 (participant history localStorage, medium) — deps done
+  - TASK-043 ✓ DONE — participant history localStorage implemented
   - TASK-044 (password recovery email, medium) — deps done
   - TASK-045 (random question order, medium) — deps done
   - TASK-037 (Docker multi-stage prod, medium) — deps done
@@ -869,3 +869,39 @@
   - TASK-032 (frontend PDF button, low) — depends on TASK-031
   - TASK-042 (animations UX polish, low) — deps done
   - TASK-038 (CI/CD GitHub Actions, low) — depends on TASK-037
+
+---
+
+## TASK-043: Participant session history (localStorage + MyResultsPage) — DONE (2025-12-01)
+
+### What was done:
+- `backend/internal/repository/session_repo.go`: added `ParticipantSessionSummaryRow` struct and `GetByParticipantToken` — single SQL query joining participants+sessions+polls, computes rank via correlated subquery
+- `backend/internal/service/history_service.go`: added `ParticipantHistorySummary` response type, `GetParticipantHistory` method to `HistoryService` interface + implementation
+- `backend/internal/handler/session_handler.go`: added `handleGetByParticipantToken` — public, no JWT
+- `backend/internal/handler/routes.go`: added `GET /api/sessions/by-token?session_token=:uuid` as a public route outside JWT group
+- `frontend/src/types/index.ts`: added `ParticipantHistorySummary` interface
+- `frontend/src/api/polls.ts`: added `getParticipantSessionHistory(sessionToken)` using plain axios to avoid 401 interceptor redirect
+- `frontend/src/pages/ParticipantSessionPage.tsx`: on `session_end`, saves `{session_token, room_code, saved_at}` to `localStorage['participant_history']`; added "Мои результаты" button to FinalScreen
+- Created `frontend/src/pages/MyResultsPage.tsx`: reads localStorage, fetches summaries in parallel, shows poll title / date / score / rank; loading skeletons; empty state; localStorage unavailable warning
+- `frontend/src/pages/JoinPage.tsx`: "Моя история результатов" link → /my-results
+- `frontend/src/routes/index.tsx`: added public `/my-results` route
+
+### Files changed:
+- backend/internal/repository/session_repo.go
+- backend/internal/service/history_service.go
+- backend/internal/handler/session_handler.go
+- backend/internal/handler/routes.go
+- frontend/src/types/index.ts
+- frontend/src/api/polls.ts
+- frontend/src/pages/ParticipantSessionPage.tsx
+- frontend/src/pages/JoinPage.tsx
+- frontend/src/routes/index.tsx
+- frontend/src/pages/MyResultsPage.tsx (new)
+- tasks.json (TASK-043 status → done)
+
+### Notes for next iteration:
+- TASK-044 (password recovery email, medium) — deps done; needs SMTP config
+- TASK-045 (random question order, medium) — backend only; deps done
+- TASK-037 (Docker multi-stage prod, medium) — deps done; verify backend image < 30 MB
+- TASK-031 (PDF export, low) — deps done; needs gofpdf library
+- TASK-042 (animations UX polish, low) — deps done
