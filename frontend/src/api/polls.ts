@@ -1,5 +1,8 @@
+import axios from 'axios'
 import { apiClient } from './client'
-import type { Poll, Question, Participant, Session, SessionSummary, SessionDetail } from '../types'
+import type { Poll, Question, Participant, Session, SessionSummary, SessionDetail, ParticipantHistorySummary } from '../types'
+
+const BASE_URL = import.meta.env.VITE_API_URL || '/api'
 
 export async function getPolls(): Promise<Poll[]> {
   const res = await apiClient.get<Poll[]>('/polls')
@@ -97,5 +100,13 @@ export async function getSessions(): Promise<SessionSummary[]> {
 
 export async function getSession(id: string): Promise<SessionDetail> {
   const res = await apiClient.get<SessionDetail>(`/sessions/${id}`)
+  return res.data
+}
+
+// Public endpoint — no JWT required. Uses plain axios to avoid 401 redirect.
+export async function getParticipantSessionHistory(sessionToken: string): Promise<ParticipantHistorySummary> {
+  const res = await axios.get<ParticipantHistorySummary>(
+    `${BASE_URL}/sessions/by-token?session_token=${encodeURIComponent(sessionToken)}`,
+  )
   return res.data
 }

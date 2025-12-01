@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import { socket } from '../ws/socket'
 import { BrainstormInput } from '../components/BrainstormInput'
 
@@ -206,6 +206,22 @@ export function ParticipantSessionPage() {
       setTotalParticipants(rankings.length)
       setStatus('finished')
       setScreenKey((k) => k + 1)
+
+      // Save to participant history in localStorage
+      const sessionToken = localStorage.getItem(`session_token_${code}`)
+      if (sessionToken && code) {
+        try {
+          const existing: Array<{ session_token: string; room_code: string; saved_at: string }> =
+            JSON.parse(localStorage.getItem('participant_history') || '[]')
+          const filtered = existing.filter((e) => e.room_code !== code)
+          localStorage.setItem(
+            'participant_history',
+            JSON.stringify([{ session_token: sessionToken, room_code: code, saved_at: new Date().toISOString() }, ...filtered]),
+          )
+        } catch {
+          // ignore localStorage errors
+        }
+      }
     }
 
     socket.on('room_state_changed', onStateChanged)
@@ -735,13 +751,23 @@ function FinalScreen({
         </div>
       )}
 
-      <button
-        onClick={onHome}
-        className="bg-white text-indigo-700 px-8 py-3 rounded-xl font-semibold text-lg hover:bg-indigo-50 transition-colors animate-fade-in-up"
+      <div
+        className="flex flex-col sm:flex-row gap-3 animate-fade-in-up"
         style={{ animationDelay: '900ms' }}
       >
-        На главную
-      </button>
+        <button
+          onClick={onHome}
+          className="bg-white text-indigo-700 px-8 py-3 rounded-xl font-semibold text-lg hover:bg-indigo-50 transition-colors"
+        >
+          На главную
+        </button>
+        <Link
+          to="/my-results"
+          className="bg-white/20 text-white px-8 py-3 rounded-xl font-semibold text-lg hover:bg-white/30 transition-colors text-center"
+        >
+          Мои результаты
+        </Link>
+      </div>
     </div>
   )
 }

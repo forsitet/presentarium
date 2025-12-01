@@ -93,6 +93,13 @@ export const router = createBrowserRouter([
     },
   },
   {
+    path: 'my-results',
+    lazy: async () => {
+      const { MyResultsPage } = await import('../pages/MyResultsPage')
+      return { Component: MyResultsPage }
+    },
+  },
+  {
     path: '*',
     element: <Navigate to="/dashboard" replace />,
   },
