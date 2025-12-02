@@ -3,9 +3,9 @@ import { useNavigate } from 'react-router-dom'
 import { PollCard } from '../components/PollCard'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { useAuthStore } from '../stores/authStore'
-import { getPolls, deletePoll, copyPoll, createRoom } from '../api/polls'
+import { getPolls, deletePoll, copyPoll, createRoom, getSessions } from '../api/polls'
 import { apiClient } from '../api/client'
-import type { Poll } from '../types'
+import type { Poll, SessionSummary } from '../types'
 
 function PollCardSkeleton() {
   return (
@@ -23,10 +23,94 @@ function PollCardSkeleton() {
   )
 }
 
+function SessionHistoryTab() {
+  const navigate = useNavigate()
+  const [sessions, setSessions] = useState<SessionSummary[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    getSessions()
+      .then(setSessions)
+      .catch(() => setError('Не удалось загрузить историю'))
+      .finally(() => setLoading(false))
+  }, [])
+
+  const formatDate = (iso?: string) => {
+    if (!iso) return '—'
+    return new Date(iso).toLocaleDateString('ru-RU', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    })
+  }
+
+  if (loading) {
+    return (
+      <div className="space-y-3 animate-pulse">
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="h-20 bg-gray-100 rounded-xl" />
+        ))}
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+        {error}
+      </div>
+    )
+  }
+
+  if (!sessions.length) {
+    return (
+      <div className="flex flex-col items-center justify-center py-24 text-center">
+        <div className="w-16 h-16 mb-4 rounded-full bg-indigo-50 flex items-center justify-center text-3xl">
+          📊
+        </div>
+        <h3 className="text-lg font-semibold text-gray-700 mb-1">История пуста</h3>
+        <p className="text-sm text-gray-400">Проведите первый опрос, чтобы здесь появилась статистика</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-3">
+      {sessions.map((s) => (
+        <button
+          key={s.id}
+          onClick={() => navigate(`/sessions/${s.id}`)}
+          className="w-full text-left bg-white rounded-xl border border-gray-100 p-4 hover:border-indigo-200 hover:shadow-sm transition-all"
+        >
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold text-gray-900 truncate">{s.poll_title}</p>
+              <p className="text-xs text-gray-400 mt-0.5">{formatDate(s.started_at)}</p>
+            </div>
+            <div className="flex items-center gap-6 shrink-0 text-right">
+              <div>
+                <div className="text-sm font-bold text-gray-700">{s.participant_count}</div>
+                <div className="text-xs text-gray-400">участников</div>
+              </div>
+              <div>
+                <div className="text-sm font-bold text-indigo-600">{Math.round(s.average_score)}</div>
+                <div className="text-xs text-gray-400">ср. балл</div>
+              </div>
+              <span className="text-gray-300 text-lg">›</span>
+            </div>
+          </div>
+        </button>
+      ))}
+    </div>
+  )
+}
+
 export function DashboardPage() {
   const navigate = useNavigate()
   const { user, logout } = useAuthStore()
 
+  const [tab, setTab] = useState<'polls' | 'history'>('polls')
   const [polls, setPolls] = useState<Poll[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -117,68 +201,97 @@ export function DashboardPage() {
       </header>
 
       <main className="max-w-5xl mx-auto px-4 py-8">
-        {/* Page title + create button */}
+        {/* Tabs + action button */}
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-2xl font-bold text-gray-900">Мои опросы</h2>
-          <button
-            onClick={() => navigate('/polls/new')}
-            className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
-          >
-            + Создать опрос
-          </button>
-        </div>
-
-        {/* Error banner */}
-        {error && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 flex justify-between">
-            <span>{error}</span>
-            <button onClick={() => setError(null)} className="ml-4 text-red-400 hover:text-red-600">
-              ✕
+          <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+            <button
+              onClick={() => setTab('polls')}
+              className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                tab === 'polls'
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              Мои опросы
+            </button>
+            <button
+              onClick={() => setTab('history')}
+              className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                tab === 'history'
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              История
             </button>
           </div>
-        )}
-
-        {/* Loading skeletons */}
-        {loading && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {[1, 2, 3].map((i) => (
-              <PollCardSkeleton key={i} />
-            ))}
-          </div>
-        )}
-
-        {/* Empty state */}
-        {!loading && polls.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-24 text-center">
-            <div className="w-16 h-16 mb-4 rounded-full bg-indigo-50 flex items-center justify-center text-3xl">
-              📋
-            </div>
-            <h3 className="text-lg font-semibold text-gray-700 mb-1">Пока нет опросов</h3>
-            <p className="text-sm text-gray-400 mb-5">Создайте первый опрос, чтобы начать</p>
+          {tab === 'polls' && (
             <button
               onClick={() => navigate('/polls/new')}
-              className="px-5 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
+              className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
             >
-              Создать опрос
+              + Создать опрос
             </button>
-          </div>
-        )}
+          )}
+        </div>
 
-        {/* Poll cards grid */}
-        {!loading && polls.length > 0 && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {polls.map((poll) => (
-              <div key={poll.id} className={launching === poll.id ? 'opacity-60 pointer-events-none' : ''}>
-                <PollCard
-                  poll={poll}
-                  onEdit={(id) => navigate(`/polls/${id}/edit`)}
-                  onLaunch={handleLaunch}
-                  onDelete={(id) => setDeleteTarget(id)}
-                  onCopy={handleCopy}
-                />
+        {tab === 'history' && <SessionHistoryTab />}
+
+        {tab === 'polls' && (
+          <>
+            {/* Error banner */}
+            {error && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 flex justify-between">
+                <span>{error}</span>
+                <button onClick={() => setError(null)} className="ml-4 text-red-400 hover:text-red-600">
+                  ✕
+                </button>
               </div>
-            ))}
-          </div>
+            )}
+
+            {/* Loading skeletons */}
+            {loading && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {[1, 2, 3].map((i) => (
+                  <PollCardSkeleton key={i} />
+                ))}
+              </div>
+            )}
+
+            {/* Empty state */}
+            {!loading && polls.length === 0 && (
+              <div className="flex flex-col items-center justify-center py-24 text-center">
+                <div className="w-16 h-16 mb-4 rounded-full bg-indigo-50 flex items-center justify-center text-3xl">
+                  📋
+                </div>
+                <h3 className="text-lg font-semibold text-gray-700 mb-1">Пока нет опросов</h3>
+                <p className="text-sm text-gray-400 mb-5">Создайте первый опрос, чтобы начать</p>
+                <button
+                  onClick={() => navigate('/polls/new')}
+                  className="px-5 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
+                >
+                  Создать опрос
+                </button>
+              </div>
+            )}
+
+            {/* Poll cards grid */}
+            {!loading && polls.length > 0 && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {polls.map((poll) => (
+                  <div key={poll.id} className={launching === poll.id ? 'opacity-60 pointer-events-none' : ''}>
+                    <PollCard
+                      poll={poll}
+                      onEdit={(id) => navigate(`/polls/${id}/edit`)}
+                      onLaunch={handleLaunch}
+                      onDelete={(id) => setDeleteTarget(id)}
+                      onCopy={handleCopy}
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
         )}
       </main>
 

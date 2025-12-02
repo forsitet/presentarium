@@ -62,6 +62,13 @@ export const router = createBrowserRouter([
           return { Component: HostSessionPage }
         },
       },
+      {
+        path: 'sessions/:id',
+        lazy: async () => {
+          const { PollResultsPage } = await import('../pages/PollResultsPage')
+          return { Component: PollResultsPage }
+        },
+      },
     ],
   },
   {
