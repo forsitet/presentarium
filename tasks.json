@@ -691,7 +691,7 @@
         "Шаг 5: на странице присутствуют кнопки «Скачать CSV» и «Скачать PDF»"
       ],
       "dependencies": ["TASK-028", "TASK-009"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-030",

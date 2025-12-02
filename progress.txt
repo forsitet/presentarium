@@ -421,6 +421,38 @@
 
 ---
 
+## TASK-029: Frontend session history page and results detail — DONE (2025-12-02)
+
+### What was done:
+- Extended `frontend/src/types/index.ts` with `SessionSummary`, `QuestionStat`, `SessionDetail` types
+- Added `getSessions()` and `getSession()` to `frontend/src/api/polls.ts`
+- Created `frontend/src/pages/PollResultsPage.tsx`:
+  - Session header: poll name, date range, 3-stat grid (participants, avg score, question count)
+  - Export buttons: «Скачать CSV» (direct `/api/sessions/:id/export/csv` link), «Скачать PDF» (disabled placeholder for TASK-031)
+  - Final leaderboard using existing `Leaderboard` component (dark bg)
+  - Per-question stats: choice types → `AnswerBarChart` (with correct answer highlighting, options fetched from poll), open_text/word_cloud → `TextResponses` inline list, brainstorm → total count
+- Updated `frontend/src/pages/DashboardPage.tsx`:
+  - Added `SessionHistoryTab` component: loading skeleton, empty state, session rows with poll title / date / participant count / avg score, clickable → navigates to `/sessions/:id`
+  - Added tab switcher (Мои опросы | История) in page header
+- Updated `frontend/src/routes/index.tsx`: added `/sessions/:id` protected route → PollResultsPage
+
+### Files changed:
+- frontend/src/types/index.ts (SessionSummary, QuestionStat, SessionDetail types)
+- frontend/src/api/polls.ts (getSessions, getSession)
+- frontend/src/pages/PollResultsPage.tsx (new)
+- frontend/src/pages/DashboardPage.tsx (SessionHistoryTab + tab switcher)
+- frontend/src/routes/index.tsx (/sessions/:id route)
+- tasks.json (TASK-029 status → done)
+
+### Notes for next iteration:
+- TASK-030 (CSV export backend) — now unblocked (deps: TASK-028 ✓); CSV button in PollResultsPage already links to the endpoint
+- TASK-031 (PDF export) — now unblocked (deps: TASK-028 ✓); PDF button is a placeholder
+- TASK-023 (frontend word cloud) — medium, all deps done
+- TASK-025 (frontend brainstorm UI) — medium, all deps done
+- TASK-027 (manual moderation backend) — medium, all deps done
+
+---
+
 ## TASK-028: Backend session history — list, detail, participants, answers — DONE (2025-11-28)
 
 ### What was done:
