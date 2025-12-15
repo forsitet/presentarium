@@ -738,7 +738,7 @@
         "Шаг 5: файл скачивается с корректным именем (Content-Disposition)"
       ],
       "dependencies": ["TASK-028"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-032",

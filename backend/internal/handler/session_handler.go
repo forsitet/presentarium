@@ -15,6 +15,7 @@ import (
 	"presentarium/internal/errs"
 	appmw "presentarium/internal/middleware"
 	"presentarium/internal/service"
+	"presentarium/pkg/pdf"
 )
 
 type sessionHandler struct {
@@ -199,6 +200,103 @@ func (h *sessionHandler) handleGetByParticipantToken(w http.ResponseWriter, r *h
 		return
 	}
 	writeJSON(w, http.StatusOK, summary)
+}
+
+// pdfExportBody is the optional request body for POST /api/sessions/:id/export/pdf.
+type pdfExportBody struct {
+	Charts []pdfChartEntry `json:"charts"`
+}
+
+type pdfChartEntry struct {
+	QuestionIndex int    `json:"question_index"` // 0-based index into questions list
+	Image         string `json:"image"`          // base64-encoded PNG or JPEG
+}
+
+// handleExportPDF generates and streams a PDF report for a finished session.
+// POST /api/sessions/:id/export/pdf
+// Optional body: { "charts": [{"question_index": 0, "image": "<base64>"}] }
+func (h *sessionHandler) handleExportPDF(w http.ResponseWriter, r *http.Request) {
+	userID := r.Context().Value(appmw.UserIDKey).(uuid.UUID)
+	sessionID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid session id")
+		return
+	}
+
+	// Parse optional body
+	var body pdfExportBody
+	if r.ContentLength > 0 {
+		_ = json.NewDecoder(r.Body).Decode(&body)
+	}
+
+	data, err := h.historySvc.ExportPDFData(r.Context(), userID, sessionID)
+	if err != nil {
+		if errors.Is(err, errs.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "session not found")
+			return
+		}
+		if errors.Is(err, errs.ErrForbidden) {
+			writeError(w, http.StatusForbidden, "forbidden")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "failed to load session data")
+		return
+	}
+
+	// Build chart image map
+	chartImages := make(map[int]string, len(body.Charts))
+	for _, c := range body.Charts {
+		if c.Image != "" {
+			chartImages[c.QuestionIndex] = c.Image
+		}
+	}
+
+	// Convert service types to pdf.SessionReport
+	questions := make([]pdf.QuestionReport, 0, len(data.Detail.Questions))
+	for _, q := range data.Detail.Questions {
+		questions = append(questions, pdf.QuestionReport{
+			Text:         q.Text,
+			Type:         q.Type,
+			TotalAnswers: q.TotalAnswers,
+			Distribution: q.Distribution,
+		})
+	}
+
+	leaderboard := make([]pdf.LeaderboardEntry, 0, len(data.Detail.Leaderboard))
+	for i, row := range data.Detail.Leaderboard {
+		leaderboard = append(leaderboard, pdf.LeaderboardEntry{
+			Rank:  i + 1,
+			Name:  row.Name,
+			Score: row.TotalScore,
+		})
+	}
+
+	report := pdf.SessionReport{
+		PollTitle:        data.Detail.PollTitle,
+		StartedAt:        data.Detail.StartedAt,
+		FinishedAt:       data.Detail.FinishedAt,
+		ParticipantCount: data.Detail.ParticipantCount,
+		AverageScore:     data.Detail.AverageScore,
+		Questions:        questions,
+		Leaderboard:      leaderboard,
+		ChartImages:      chartImages,
+	}
+
+	// Build filename
+	dateStr := time.Now().Format("2006-01-02")
+	if data.FinishedAt != nil {
+		dateStr = data.FinishedAt.Format("2006-01-02")
+	}
+	filename := fmt.Sprintf("session_%s_%s.pdf", sessionID.String(), dateStr)
+
+	w.Header().Set("Content-Type", "application/pdf")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
+	w.WriteHeader(http.StatusOK)
+
+	if err := pdf.GenerateReport(w, report); err != nil {
+		// Headers already sent; nothing we can do
+		return
+	}
 }
 
 // answerToString converts a JSON answer value to a human-readable string.

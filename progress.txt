@@ -1024,5 +1024,50 @@
 
 ### Notes for next iteration:
 - TASK-038 (CI/CD GitHub Actions, low) — now unblocked (depends on TASK-037 ✓)
-- TASK-031 (PDF export, low) — deps done; needs gofpdf library
+- TASK-031 ✓ DONE — PDF export implemented (pure stdlib, no external deps)
+- TASK-042 (animations UX polish, low) — deps done
+
+---
+
+## TASK-031: Backend PDF export — DONE (2025-12-15)
+
+### What was done:
+- Created `backend/pkg/pdf/cp1251.go`: UTF-8 → Windows-1251 conversion table (128 entries for 0x80-0xFF range including full А–я Cyrillic block)
+- Created `backend/pkg/pdf/writer.go`: minimal pure-stdlib PDF document builder:
+  - `Doc` struct: object buffer, xref offsets, page/font/image registries
+  - Type1 font resources with custom CP1251 encoding (Differences array with afii glyph names for Cyrillic)
+  - `Page` builder: text at position, font/size switching (normal/bold), horizontal rules, filled rectangle bars, PNG/JPEG image embedding
+  - `AddImagePNG`: decodes base64 PNG/JPEG, embeds as XObject (JPEG via DCTDecode, PNG via raw RGB scan)
+  - `WriteTo`: finalizes xref table and trailer, writes complete PDF/1.4 to io.Writer
+- Created `backend/pkg/pdf/report.go`: high-level report generator `GenerateReport(w, SessionReport)`:
+  - Page 1: title ("Отчёт о сессии опроса"), poll name, dates, stat summary (participants, avg score, question count)
+  - Page 2+: per-question breakdown — title, type, answer count, inline bar chart (gray shades for bars, or embedded chart image if provided)
+  - Final page: leaderboard top-10 with rank + name + score
+  - `ChartImages map[int]string` allows frontend to pass base64-encoded chart screenshots (from html2canvas) keyed by question index
+- Extended `backend/internal/service/history_service.go`:
+  - Added `PDFExportData` struct and `ExportPDFData` method to `HistoryService` interface + implementation
+- Extended `backend/internal/handler/session_handler.go`:
+  - Added `pdfExportBody` / `pdfChartEntry` request types
+  - Added `handleExportPDF`: POST /api/sessions/:id/export/pdf — parses optional body with chart images, calls `ExportPDFData`, builds `pdf.SessionReport`, calls `pdf.GenerateReport`, streams with Content-Disposition attachment
+- Updated `backend/internal/handler/routes.go`: registered `POST /{id}/export/pdf` route
+
+### Key design choices:
+- No external dependencies — pure Go stdlib only (no gofpdf needed)
+- Cyrillic via CP1251 encoding + Differences array; modern PDF viewers perform font substitution for Cyrillic characters
+- PDF images: JPEG stored with DCTDecode filter; PNG decoded to raw RGB for maximum compatibility
+- Inline bar charts drawn as filled gray rectangles when no chart image provided
+- q/Q (save/restore graphics state) wraps each bar draw to prevent color bleed into text
+
+### Files changed:
+- backend/pkg/pdf/cp1251.go (new)
+- backend/pkg/pdf/writer.go (new)
+- backend/pkg/pdf/report.go (new)
+- backend/internal/service/history_service.go (ExportPDFData + PDFExportData)
+- backend/internal/handler/session_handler.go (handleExportPDF + pdfExportBody types)
+- backend/internal/handler/routes.go (POST /export/pdf route)
+- tasks.json (TASK-031 status → done)
+
+### Notes for next iteration:
+- TASK-032 (frontend PDF export button, low) — now unblocked (depends on TASK-031 ✓)
+- TASK-038 (CI/CD GitHub Actions, low) — unblocked
 - TASK-042 (animations UX polish, low) — deps done
