@@ -138,6 +138,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 				r.Get("/{id}/participants", sessionH.handleListParticipants)
 				r.Get("/{id}/answers", sessionH.handleListAnswers)
 				r.Get("/{id}/export/csv", sessionH.handleExportCSV)
+				r.Post("/{id}/export/pdf", sessionH.handleExportPDF)
 				// Moderation: hide/show answers and brainstorm ideas
 				r.Patch("/{sessionId}/answers/{answerId}", moderationH.handleHideAnswer)
 				r.Patch("/{sessionId}/ideas/{ideaId}", moderationH.handleHideIdea)

@@ -69,6 +69,13 @@ type ParticipantHistorySummary struct {
 	TotalParticipants int        `json:"total_participants"`
 }
 
+// PDFExportData holds all data required to generate a PDF session report.
+type PDFExportData struct {
+	Detail      *SessionDetailResponse
+	FinishedAt  *time.Time
+	SessionID   uuid.UUID
+}
+
 // HistoryService exposes read-only session history for organizers.
 type HistoryService interface {
 	ListSessions(ctx context.Context, userID uuid.UUID) ([]SessionSummaryResponse, error)
@@ -76,6 +83,8 @@ type HistoryService interface {
 	ListParticipants(ctx context.Context, userID, sessionID uuid.UUID) ([]ParticipantResultResponse, error)
 	ListAnswers(ctx context.Context, userID, sessionID uuid.UUID) ([]repository.AnswerExportRow, error)
 	ExportCSV(ctx context.Context, userID, sessionID uuid.UUID) ([]repository.AnswerExportRow, *time.Time, error)
+	// ExportPDFData loads all data needed to render the PDF report.
+	ExportPDFData(ctx context.Context, userID, sessionID uuid.UUID) (*PDFExportData, error)
 	// GetParticipantHistory returns session summary for a participant identified by session_token.
 	GetParticipantHistory(ctx context.Context, sessionToken uuid.UUID) (*ParticipantHistorySummary, error)
 }
@@ -244,6 +253,22 @@ func (s *historyService) ExportCSV(ctx context.Context, userID, sessionID uuid.U
 		return nil, nil, err
 	}
 	return answers, row.FinishedAt, nil
+}
+
+func (s *historyService) ExportPDFData(ctx context.Context, userID, sessionID uuid.UUID) (*PDFExportData, error) {
+	detail, err := s.GetSession(ctx, userID, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	row, err := s.sessionRepo.GetByIDWithPoll(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	return &PDFExportData{
+		Detail:     detail,
+		FinishedAt: row.FinishedAt,
+		SessionID:  sessionID,
+	}, nil
 }
 
 func (s *historyService) GetParticipantHistory(ctx context.Context, sessionToken uuid.UUID) (*ParticipantHistorySummary, error) {
