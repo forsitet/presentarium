@@ -23,6 +23,7 @@ type RouterDeps struct {
 	ParticipantService  service.ParticipantService
 	ConductService      service.ConductService
 	HistoryService      service.HistoryService
+	ModerationService   service.ModerationService
 	WSHandler           *ws.Handler
 	JWTSecret           string
 	RefreshTokenTTLDays int
@@ -74,6 +75,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 	participantH := newParticipantHandler(deps.ParticipantService)
 	uploadH := newUploadHandler(deps.UploadsDir)
 	sessionH := newSessionHandler(deps.HistoryService)
+	moderationH := newModerationHandler(deps.ModerationService)
 
 	r.Route("/api", func(r chi.Router) {
 		r.Route("/auth", func(r chi.Router) {
@@ -127,6 +129,9 @@ func NewRouter(deps RouterDeps) http.Handler {
 				r.Get("/{id}/participants", sessionH.handleListParticipants)
 				r.Get("/{id}/answers", sessionH.handleListAnswers)
 				r.Get("/{id}/export/csv", sessionH.handleExportCSV)
+				// Moderation: hide/show answers and brainstorm ideas
+				r.Patch("/{sessionId}/answers/{answerId}", moderationH.handleHideAnswer)
+				r.Patch("/{sessionId}/ideas/{ideaId}", moderationH.handleHideIdea)
 			})
 		})
 	})

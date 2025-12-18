@@ -529,6 +529,40 @@
 
 ---
 
+## TASK-027: Backend manual moderation — DONE (2026-03-11)
+
+### What was done:
+- Extended `backend/internal/repository/answer_repo.go`:
+  - Added `GetByID(ctx, answerID)` — fetches a single answer by ID (for ownership check)
+  - Added `SetHidden(ctx, answerID, isHidden)` — updates `is_hidden` flag; returns ErrNotFound if row missing
+- Created `backend/internal/service/moderation_service.go`:
+  - `ModerationService` interface with `HideAnswer` and `HideIdea` methods
+  - `HideAnswer`: ownership check via `GetByIDWithPoll`, verifies answer belongs to session, calls `answerRepo.SetHidden`, broadcasts `answer_hidden` WS message to live room
+  - `HideIdea`: ownership check, verifies idea belongs to session, calls `brainstormRepo.SetIdeaHidden`, broadcasts `answer_hidden` WS message to live room
+  - Both return `ErrForbidden` if caller doesn't own the session or resource belongs to another session
+- Created `backend/internal/handler/moderation_handler.go`:
+  - `PATCH /api/sessions/:sessionId/answers/:answerId {action:'hide'|'show'}` → 204 No Content
+  - `PATCH /api/sessions/:sessionId/ideas/:ideaId {action:'hide'|'show'}` → 204 No Content
+  - Returns 400 for invalid IDs or unknown action, 403 for forbidden, 404 for not found
+- Updated `backend/internal/handler/routes.go`: added `ModerationService` to RouterDeps, registered 2 new PATCH routes under /api/sessions
+- Updated `backend/cmd/server/main.go`: creates `moderationSvc` and passes it to RouterDeps
+
+### Files changed:
+- backend/internal/repository/answer_repo.go (GetByID, SetHidden methods)
+- backend/internal/service/moderation_service.go (new)
+- backend/internal/handler/moderation_handler.go (new)
+- backend/internal/handler/routes.go (ModerationService field + 2 routes)
+- backend/cmd/server/main.go (wire moderationSvc)
+- tasks.json (TASK-027 status → done)
+
+### Notes for next iteration:
+- TASK-023 (frontend word cloud) — medium, all deps done
+- TASK-025 (frontend brainstorm UI) — medium, all deps done
+- TASK-033 (real-time stats organizer) — medium, depends on TASK-020 ✓, TASK-018 ✓
+- TASK-034 (participant finish screens + animations) — medium, all deps done; unblocks TASK-046
+
+---
+
 ## TASK-036: Nginx reverse proxy — dev & prod — DONE (2026-02-14)
 
 ### What was done:
