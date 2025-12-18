@@ -46,6 +46,10 @@ type AnswerRepository interface {
 	DistributionByQuestion(ctx context.Context, questionID, sessionID uuid.UUID) (map[string]int, error)
 	// ListExportBySession returns all answers in a session joined with participant and question data.
 	ListExportBySession(ctx context.Context, sessionID uuid.UUID) ([]AnswerExportRow, error)
+	// SetHidden updates the is_hidden flag on an answer. Returns ErrNotFound if the answer doesn't exist.
+	SetHidden(ctx context.Context, answerID uuid.UUID, isHidden bool) error
+	// GetByID returns an answer by its ID, or ErrNotFound.
+	GetByID(ctx context.Context, answerID uuid.UUID) (*model.Answer, error)
 }
 
 type postgresAnswerRepo struct {
@@ -157,6 +161,34 @@ func (r *postgresAnswerRepo) DistributionByQuestion(ctx context.Context, questio
 		dist[row.Key] = row.Cnt
 	}
 	return dist, nil
+}
+
+func (r *postgresAnswerRepo) GetByID(ctx context.Context, answerID uuid.UUID) (*model.Answer, error) {
+	var a model.Answer
+	err := r.db.GetContext(ctx, &a,
+		`SELECT id, participant_id, question_id, session_id, answer, is_correct, score, response_time_ms, is_hidden, answered_at
+		 FROM answers WHERE id=$1`, answerID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, errs.ErrNotFound
+		}
+		return nil, err
+	}
+	return &a, nil
+}
+
+func (r *postgresAnswerRepo) SetHidden(ctx context.Context, answerID uuid.UUID, isHidden bool) error {
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE answers SET is_hidden=$2 WHERE id=$1`,
+		answerID, isHidden)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return errs.ErrNotFound
+	}
+	return nil
 }
 
 func (r *postgresAnswerRepo) ListExportBySession(ctx context.Context, sessionID uuid.UUID) ([]AnswerExportRow, error) {
