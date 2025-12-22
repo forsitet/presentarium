@@ -86,10 +86,10 @@ export function JoinPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
-        <div className="text-center mb-8">
-          <div className="text-5xl mb-3">🎯</div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-1">Войти в опрос</h1>
+      <div className="bg-white rounded-2xl shadow-2xl p-5 sm:p-8 w-full max-w-md">
+        <div className="text-center mb-6 sm:mb-8">
+          <div className="text-4xl sm:text-5xl mb-3">🎯</div>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-1">Войти в опрос</h1>
           <p className="text-gray-500">Введите код комнаты и своё имя</p>
         </div>
 
@@ -109,7 +109,7 @@ export function JoinPage() {
               placeholder="123456"
               maxLength={6}
               inputMode="numeric"
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg text-center text-3xl font-mono tracking-widest focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent disabled:bg-gray-100"
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg text-center text-xl sm:text-3xl font-mono tracking-widest focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent disabled:bg-gray-100"
               disabled={!!urlCode || connecting}
             />
             {errors.code && (

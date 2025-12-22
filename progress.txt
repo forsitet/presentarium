@@ -720,5 +720,60 @@
 
 ### Notes for next iteration:
 - TASK-046 (E2E full scenario, HIGH) — all deps done; requires live app + multiple browsers (manual)
-- TASK-041 (responsive design, medium) — all deps done; needs mobile breakpoint testing
+- TASK-041 ✓ DONE — responsive design implemented
+
+---
+
+## TASK-041: Frontend responsive design and mobile optimization — DONE (2025-12-22)
+
+### What was done:
+- **HostSessionPage.tsx** (waiting state):
+  - Room code: `text-8xl` → `text-5xl sm:text-7xl lg:text-8xl` — scales from mobile to projector
+  - Container padding: `px-6 py-10` → `px-4 sm:px-6 py-6 sm:py-10`
+  - Gap: `gap-10` → `gap-6 sm:gap-10`
+  - QR code: two sizes (160px mobile, 200px sm+) in responsive show/hide divs
+  - QR container padding: `p-4` → `p-3 sm:p-4`
+- **HostSessionPage.tsx** (active/showing_question/results states):
+  - "Active" screen: emoji `text-5xl` → `text-4xl sm:text-5xl`, title `text-3xl` → `text-2xl sm:text-3xl`
+  - Top bar: `px-6 py-3 gap-6` → `px-3 sm:px-6 py-2 sm:py-3 gap-2 sm:gap-4` + `flex-wrap`
+  - Timer font: `text-2xl` → `text-xl sm:text-2xl`
+  - Button labels shortened ("Завершить раньше" → "Завершить") to fit mobile bar
+  - Main grid padding: `px-6 py-8` → `px-3 sm:px-6 py-4 sm:py-8`, gap `gap-8` → `gap-5 sm:gap-8`
+  - Question box: `p-8 min-h-[180px]` → `p-4 sm:p-8 min-h-[120px] sm:min-h-[180px]`
+  - Question text: `text-2xl lg:text-3xl` → `text-xl sm:text-2xl lg:text-3xl`
+  - Results top bar: same flex-wrap treatment, shortened button labels
+- **HostSessionPage.tsx** (finished state):
+  - Padding `px-6 py-12` → `px-4 sm:px-6 py-8 sm:py-12`
+  - Trophy: `text-6xl` → `text-5xl sm:text-6xl`, title: `text-3xl` → `text-2xl sm:text-3xl`
+- **ParticipantSessionPage.tsx**:
+  - Waiting screen: title `text-4xl` → `text-2xl sm:text-4xl`, subtitle `text-lg` → `text-base sm:text-lg`
+  - Question text container: `p-5 mb-6` → `p-4 sm:p-5 mb-4 sm:mb-6`
+  - Question text: `text-xl` → `text-lg sm:text-xl` (still ≥ 18px on all screens)
+  - Answer buttons: `min-h-[64px]` unchanged — already > 48px WCAG minimum ✓
+  - Results options gap: `gap-3 mb-5` → `gap-2 sm:gap-3 mb-4 sm:mb-5`
+  - FinalScreen: trophy `text-6xl` → `text-5xl sm:text-6xl`, title `text-4xl` → `text-2xl sm:text-4xl`
+- **JoinPage.tsx**:
+  - Card padding: `p-8` → `p-5 sm:p-8`
+  - Header margin: `mb-8` → `mb-6 sm:mb-8`
+  - Emoji: `text-5xl` → `text-4xl sm:text-5xl`
+  - Title: `text-3xl` → `text-2xl sm:text-3xl`
+  - Code input: `text-3xl` → `text-xl sm:text-3xl` (prevents overflow on 320px)
+
+### Key constraints verified:
+- Answer buttons: `min-h-[64px]` = 64px > 48px WCAG AA touch target ✓
+- Question text minimum: `text-lg` = 18px on mobile ✓
+- Organizer screen at 1920×1080: `lg:text-8xl` room code + `lg:text-3xl` question text ✓
+- Tailwind breakpoints used: `sm:` (640px), `lg:` (1024px)
+
+### Files changed:
+- frontend/src/pages/HostSessionPage.tsx (responsive padding, font sizes, QR code sizing)
+- frontend/src/pages/ParticipantSessionPage.tsx (responsive font sizes, padding)
+- frontend/src/pages/JoinPage.tsx (responsive padding, font sizes)
+- tasks.json (TASK-041 status → done)
+
+### Notes for next iteration:
+- TASK-046 (E2E full scenario, HIGH) — all deps done; requires live app + multiple browsers (manual)
+- TASK-043 (participant history localStorage, medium) — all deps done
+- TASK-044 (password recovery backend, medium) — all deps done
+- TASK-042 (animations UX polish, low) — depends on TASK-041 ✓
 - TASK-043 (participant history localStorage, medium) — all deps done

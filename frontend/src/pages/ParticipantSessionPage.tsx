@@ -316,8 +316,8 @@ export function ParticipantSessionPage() {
         </div>
 
         {/* Question text */}
-        <div className="bg-white/10 backdrop-blur rounded-2xl p-5 mb-6 text-center">
-          <p className="text-white text-xl font-semibold leading-snug">{question.text}</p>
+        <div className="bg-white/10 backdrop-blur rounded-2xl p-4 sm:p-5 mb-4 sm:mb-6 text-center">
+          <p className="text-white text-lg sm:text-xl font-semibold leading-snug">{question.text}</p>
         </div>
 
         {/* Answer submitted overlay */}
@@ -383,8 +383,8 @@ export function ParticipantSessionPage() {
             style={{ animationDirection: 'reverse', animationDuration: '1.5s' }}
           />
         </div>
-        <h1 className="text-4xl font-bold mb-3">Ждём начала...</h1>
-        <p className="text-indigo-200 text-lg">Опрос скоро начнётся. Будьте готовы!</p>
+        <h1 className="text-2xl sm:text-4xl font-bold mb-3">Ждём начала...</h1>
+        <p className="text-indigo-200 text-base sm:text-lg">Опрос скоро начнётся. Будьте готовы!</p>
         <div className="mt-8 flex justify-center gap-2">
           {[0, 1, 2].map((i) => (
             <div
@@ -584,7 +584,7 @@ function ResultsScreen({
 
       {/* Options with correct/wrong highlighting */}
       {isChoiceType && (
-        <div className="grid grid-cols-2 gap-3 mb-5">
+        <div className="grid grid-cols-2 gap-2 sm:gap-3 mb-4 sm:mb-5">
           {opts.map((opt, idx) => {
             const wasSelected =
               question.type === 'multiple_choice'
@@ -658,11 +658,11 @@ function FinalScreen({
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 flex flex-col items-center justify-center p-4 text-white overflow-hidden">
       {/* Trophy + title — fade in first */}
-      <div className="text-6xl mb-4 animate-fade-in-up" style={{ animationDelay: '0ms' }}>
+      <div className="text-5xl sm:text-6xl mb-3 sm:mb-4 animate-fade-in-up" style={{ animationDelay: '0ms' }}>
         🏆
       </div>
       <h1
-        className="text-4xl font-bold mb-2 animate-fade-in-up"
+        className="text-2xl sm:text-4xl font-bold mb-2 animate-fade-in-up"
         style={{ animationDelay: '80ms' }}
       >
         Опрос завершён!

@@ -955,7 +955,7 @@
         "Шаг 5: использовать https://webaim.org/resources/contrastchecker/ для проверки основных цветовых пар"
       ],
       "dependencies": ["TASK-021", "TASK-020"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-042",

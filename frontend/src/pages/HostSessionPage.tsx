@@ -289,15 +289,16 @@ export function HostSessionPage() {
           <span className="text-gray-400 text-sm">Экран ожидания</span>
         </div>
 
-        <div className="max-w-5xl mx-auto px-6 py-10 grid grid-cols-1 lg:grid-cols-2 gap-10">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-10 grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-10">
           {/* Left: room code + QR */}
           <div className="flex flex-col items-center">
             <p className="text-gray-400 text-sm uppercase tracking-widest mb-2">Код комнаты</p>
-            <div className="text-8xl font-black tracking-widest text-white mb-6 font-mono">
+            <div className="text-5xl sm:text-7xl lg:text-8xl font-black tracking-widest text-white mb-4 sm:mb-6 font-mono">
               {code}
             </div>
-            <div className="bg-white p-4 rounded-2xl shadow-lg mb-6">
-              <QRCodeSVG value={joinUrl} size={200} />
+            <div className="bg-white p-3 sm:p-4 rounded-2xl shadow-lg mb-4 sm:mb-6">
+              <div className="sm:hidden"><QRCodeSVG value={joinUrl} size={160} /></div>
+              <div className="hidden sm:block"><QRCodeSVG value={joinUrl} size={200} /></div>
             </div>
             <button
               onClick={handleCopy}
@@ -355,10 +356,10 @@ export function HostSessionPage() {
           </span>
         </div>
 
-        <div className="flex-1 flex items-center justify-center px-6">
+        <div className="flex-1 flex items-center justify-center px-4 sm:px-6">
           <div className="max-w-lg w-full text-center">
-            <div className="text-5xl mb-6">✅</div>
-            <h2 className="text-3xl font-bold mb-2">Опрос запущен!</h2>
+            <div className="text-4xl sm:text-5xl mb-4 sm:mb-6">✅</div>
+            <h2 className="text-2xl sm:text-3xl font-bold mb-2">Опрос запущен!</h2>
             <p className="text-gray-400 mb-8">
               Все участники подключены. Нажмите «Показать вопрос», чтобы начать.
             </p>
@@ -411,43 +412,43 @@ export function HostSessionPage() {
     return (
       <div className="min-h-screen bg-gray-900 text-white flex flex-col">
         {/* Top bar: progress, timer, answer count, end-early button */}
-        <div className="bg-gray-800 border-b border-gray-700 px-6 py-3 flex items-center gap-6">
-          <span className="text-gray-400 text-sm font-medium whitespace-nowrap">
+        <div className="bg-gray-800 border-b border-gray-700 px-3 sm:px-6 py-2 sm:py-3 flex flex-wrap items-center gap-2 sm:gap-4">
+          <span className="text-gray-400 text-xs sm:text-sm font-medium whitespace-nowrap">
             Вопрос {activeQ.position} / {activeQ.total}
           </span>
 
           {/* Timer bar */}
-          <div className="flex items-center gap-3 flex-1 max-w-md">
-            <div className="flex-1 bg-gray-700 rounded-full h-4 overflow-hidden">
+          <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-[120px] max-w-md">
+            <div className="flex-1 bg-gray-700 rounded-full h-3 sm:h-4 overflow-hidden">
               <div
                 className={`h-full rounded-full transition-all duration-1000 ${timerColor}`}
                 style={{ width: `${timerPct}%` }}
               />
             </div>
-            <span className="text-white font-mono text-2xl font-bold w-10 text-right">
+            <span className="text-white font-mono text-xl sm:text-2xl font-bold w-8 sm:w-10 text-right">
               {timer}
             </span>
           </div>
 
-          <span className="text-gray-300 text-sm whitespace-nowrap">
-            <span className="text-white font-bold text-lg">{answered}</span>
-            <span className="text-gray-500"> / {totalPart || participants.length} ответили</span>
+          <span className="text-gray-300 text-xs sm:text-sm whitespace-nowrap">
+            <span className="text-white font-bold text-base sm:text-lg">{answered}</span>
+            <span className="text-gray-500"> / {totalPart || participants.length}</span>
           </span>
 
           <button
             onClick={handleEndQuestion}
-            className="bg-orange-600 hover:bg-orange-500 text-white text-sm px-4 py-2 rounded-lg transition-colors font-medium whitespace-nowrap"
+            className="bg-orange-600 hover:bg-orange-500 text-white text-xs sm:text-sm px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg transition-colors font-medium whitespace-nowrap"
           >
-            Завершить раньше
+            Завершить
           </button>
         </div>
 
         {/* Main content: question + live chart */}
-        <div className="flex-1 max-w-7xl mx-auto w-full px-6 py-8 grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className="flex-1 max-w-7xl mx-auto w-full px-3 sm:px-6 py-4 sm:py-8 grid grid-cols-1 lg:grid-cols-2 gap-5 sm:gap-8">
           {/* Left: question text + option tiles */}
-          <div className="flex flex-col gap-5">
-            <div className="bg-gray-800 rounded-2xl border border-gray-700 p-8 flex items-center justify-center flex-1 min-h-[180px]">
-              <p className="text-2xl lg:text-3xl font-bold text-white text-center leading-snug">
+          <div className="flex flex-col gap-4 sm:gap-5">
+            <div className="bg-gray-800 rounded-2xl border border-gray-700 p-4 sm:p-8 flex items-center justify-center flex-1 min-h-[120px] sm:min-h-[180px]">
+              <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-white text-center leading-snug">
                 {activeQ.text}
               </p>
             </div>
@@ -613,29 +614,29 @@ export function HostSessionPage() {
     return (
       <div className="min-h-screen bg-gray-900 text-white flex flex-col">
         {/* Top bar with navigation buttons */}
-        <div className="bg-gray-800 border-b border-gray-700 px-6 py-3 flex items-center justify-between gap-4">
-          <span className="text-gray-400 text-sm">
+        <div className="bg-gray-800 border-b border-gray-700 px-3 sm:px-6 py-2 sm:py-3 flex flex-wrap items-center justify-between gap-2 sm:gap-4">
+          <span className="text-gray-400 text-xs sm:text-sm">
             Результаты: вопрос {activeQ.position} из {activeQ.total}
           </span>
-          <div className="flex gap-3">
+          <div className="flex gap-2 sm:gap-3">
             {nextQuestion && (
               <button
                 onClick={() => handleShowQuestion(nextQuestion.id)}
-                className="bg-indigo-600 hover:bg-indigo-500 text-white text-sm px-5 py-2 rounded-lg transition-colors font-medium"
+                className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs sm:text-sm px-3 sm:px-5 py-1.5 sm:py-2 rounded-lg transition-colors font-medium"
               >
-                Следующий вопрос →
+                Следующий →
               </button>
             )}
             <button
               onClick={handleEndSession}
-              className="bg-red-700 hover:bg-red-600 text-white text-sm px-5 py-2 rounded-lg transition-colors font-medium"
+              className="bg-red-700 hover:bg-red-600 text-white text-xs sm:text-sm px-3 sm:px-5 py-1.5 sm:py-2 rounded-lg transition-colors font-medium"
             >
-              Завершить опрос
+              Завершить
             </button>
           </div>
         </div>
 
-        <div className="flex-1 max-w-7xl mx-auto w-full px-6 py-8 grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className="flex-1 max-w-7xl mx-auto w-full px-3 sm:px-6 py-4 sm:py-8 grid grid-cols-1 lg:grid-cols-2 gap-5 sm:gap-8">
           {/* Left: question text + chart */}
           <div className="flex flex-col gap-5">
             <div className="bg-gray-800 rounded-2xl border border-gray-700 p-6">
@@ -725,11 +726,11 @@ export function HostSessionPage() {
   // ════════════════════════════════════════════════════════════════
   if (roomStatus === 'finished') {
     return (
-      <div className="min-h-screen bg-gray-900 text-white flex flex-col items-center justify-center px-6 py-12">
+      <div className="min-h-screen bg-gray-900 text-white flex flex-col items-center justify-center px-4 sm:px-6 py-8 sm:py-12">
         <div className="max-w-lg w-full text-center">
-          <div className="text-6xl mb-6">🏆</div>
-          <h2 className="text-3xl font-bold mb-2">Опрос завершён!</h2>
-          <p className="text-gray-400 mb-8">Итоговые результаты</p>
+          <div className="text-5xl sm:text-6xl mb-4 sm:mb-6">🏆</div>
+          <h2 className="text-2xl sm:text-3xl font-bold mb-2">Опрос завершён!</h2>
+          <p className="text-gray-400 mb-6 sm:mb-8">Итоговые результаты</p>
 
           <div className="mb-8">
             <Leaderboard entries={finalLb} title="Финальный лидерборд" />
