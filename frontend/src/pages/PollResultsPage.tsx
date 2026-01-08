@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { getSession, getQuestions } from '../api/polls'
 import { AnswerBarChart } from '../components/AnswerBarChart'
 import { Leaderboard } from '../components/Leaderboard'
+import { useExport } from '../hooks/useExport'
 import type { SessionDetail, Question } from '../types'
 
 function Skeleton() {
@@ -52,6 +53,8 @@ export function PollResultsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  const { exportCsv, exportPdf, csvStatus, pdfStatus, errorMessage, dismissError } = useExport(id)
+
   useEffect(() => {
     if (!id) return
     ;(async () => {
@@ -86,11 +89,6 @@ export function PollResultsPage() {
 
   const questionMap = new Map(questions.map((q) => [q.id, q]))
 
-  const handleCsvExport = () => {
-    if (!id) return
-    window.location.href = `/api/sessions/${id}/export/csv`
-  }
-
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white border-b border-gray-200">
@@ -106,6 +104,14 @@ export function PollResultsPage() {
       </header>
 
       <main className="max-w-4xl mx-auto px-4 py-8">
+        {/* Toast notification */}
+        {errorMessage && (
+          <div className="fixed top-4 right-4 z-50 flex items-center gap-3 bg-red-600 text-white px-4 py-3 rounded-lg shadow-lg max-w-sm animate-fade-in-up">
+            <span className="text-sm flex-1">{errorMessage}</span>
+            <button onClick={dismissError} className="text-white/80 hover:text-white text-lg leading-none">✕</button>
+          </div>
+        )}
+
         {loading && <Skeleton />}
 
         {error && (
@@ -143,17 +149,30 @@ export function PollResultsPage() {
             {/* Export buttons */}
             <div className="flex gap-3 mb-8">
               <button
-                onClick={handleCsvExport}
-                className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition-colors"
+                onClick={exportCsv}
+                disabled={csvStatus === 'loading'}
+                className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2"
               >
-                Скачать CSV
+                {csvStatus === 'loading' ? (
+                  <><span className="inline-block w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />Скачивание…</>
+                ) : csvStatus === 'success' ? (
+                  '✓ Скачан'
+                ) : (
+                  'Скачать CSV'
+                )}
               </button>
               <button
-                disabled
-                title="Генерация PDF будет доступна позже"
-                className="px-4 py-2 bg-gray-200 text-gray-400 text-sm font-medium rounded-lg cursor-not-allowed"
+                onClick={() => exportPdf()}
+                disabled={pdfStatus === 'loading'}
+                className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2"
               >
-                Скачать PDF
+                {pdfStatus === 'loading' ? (
+                  <><span className="inline-block w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />Генерация…</>
+                ) : pdfStatus === 'success' ? (
+                  '✓ Скачан'
+                ) : (
+                  'Скачать PDF'
+                )}
               </button>
             </div>
 
@@ -198,7 +217,7 @@ export function PollResultsPage() {
                     </div>
 
                     {isChoice && pollQuestion?.options && qStat.answer_distribution && (
-                      <div className="bg-gray-900 rounded-xl p-3">
+                      <div className="bg-gray-900 rounded-xl p-3" data-chart-index={idx}>
                         <AnswerBarChart
                           options={pollQuestion.options}
                           distribution={qStat.answer_distribution}

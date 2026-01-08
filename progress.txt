@@ -1068,6 +1068,37 @@
 - tasks.json (TASK-031 status → done)
 
 ### Notes for next iteration:
-- TASK-032 (frontend PDF export button, low) — now unblocked (depends on TASK-031 ✓)
+- TASK-032 ✓ DONE — frontend CSV/PDF export buttons implemented
 - TASK-038 (CI/CD GitHub Actions, low) — unblocked
 - TASK-042 (animations UX polish, low) — deps done
+
+---
+
+## TASK-032: Frontend CSV/PDF export buttons — DONE (2026-03-12)
+
+### What was done:
+- Created `frontend/src/hooks/useExport.ts`:
+  - `exportCsv(sessionId)`: uses apiClient GET with `responseType: 'blob'`, creates Object URL and triggers browser download; reads filename from Content-Disposition header
+  - `exportPdf(sessionId)`: queries all `[data-chart-index]` DOM elements, converts their SVG content to base64 PNG via Canvas API (no html2canvas needed — Recharts outputs inline SVG), POSTs to `/api/sessions/:id/export/pdf` with chart images, triggers download
+  - `svgContainerToBase64`: pure-browser SVG→Canvas conversion using XMLSerializer + Image + Canvas.toDataURL
+  - Returns `csvStatus`, `pdfStatus` (idle/loading/success/error), `errorMessage`, `dismissError`
+- Updated `frontend/src/pages/PollResultsPage.tsx`:
+  - Integrated `useExport` hook — replaced static `handleCsvExport` and disabled PDF button
+  - CSV button: shows spinner + "Скачивание…" during load, "✓ Скачан" on success
+  - PDF button: shows spinner + "Генерация…" during load (indigo color), "✓ Скачан" on success
+  - Removed disabled PDF button placeholder
+  - Added toast notification: fixed top-right overlay with dismiss button; appears on any export error
+  - Added `data-chart-index={idx}` attribute to each AnswerBarChart wrapper so `exportPdf` can locate and capture them
+
+### Key design decision:
+- Avoided html2canvas (would require npm install approval) — used XMLSerializer + Canvas API instead, which works natively with Recharts' inline SVG output
+
+### Files changed:
+- frontend/src/hooks/useExport.ts (new)
+- frontend/src/pages/PollResultsPage.tsx (useExport integration, export buttons with status, toast)
+- tasks.json (TASK-032 status → done)
+
+### Notes for next iteration:
+- TASK-038 (CI/CD GitHub Actions, low) — all deps done (TASK-037 ✓); needs .github/workflows/deploy.yml
+- TASK-042 (animations UX polish, low) — all deps done (TASK-034 ✓, TASK-041 ✓)
+- All remaining tasks are low priority; project is functionally complete

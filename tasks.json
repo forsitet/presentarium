@@ -759,7 +759,7 @@
         "Шаг 4: при ошибке сети → отображается toast-уведомление об ошибке"
       ],
       "dependencies": ["TASK-029", "TASK-030", "TASK-031"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-033",
