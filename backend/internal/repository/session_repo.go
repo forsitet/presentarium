@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"time"
 
@@ -57,6 +58,8 @@ type SessionRepository interface {
 	GetByCode(ctx context.Context, code string) (*model.Session, error)
 	GetActiveByPoll(ctx context.Context, pollID uuid.UUID) (*model.Session, error)
 	UpdateStatus(ctx context.Context, sessionID uuid.UUID, status string, startedAt, finishedAt *string) error
+	// SaveQuestionOrder persists the ordered list of question IDs for the session.
+	SaveQuestionOrder(ctx context.Context, sessionID uuid.UUID, order []uuid.UUID) error
 	// ListByUser returns summary rows for all sessions belonging to the user's polls, newest first.
 	ListByUser(ctx context.Context, userID uuid.UUID) ([]SessionSummaryRow, error)
 	// GetByIDWithPoll returns a session joined with its poll's title and user_id.
@@ -125,6 +128,17 @@ func (r *postgresSessionRepo) UpdateStatus(ctx context.Context, sessionID uuid.U
 		return errs.ErrNotFound
 	}
 	return nil
+}
+
+func (r *postgresSessionRepo) SaveQuestionOrder(ctx context.Context, sessionID uuid.UUID, order []uuid.UUID) error {
+	data, err := json.Marshal(order)
+	if err != nil {
+		return err
+	}
+	_, err = r.db.ExecContext(ctx,
+		"UPDATE sessions SET question_order = $2 WHERE id = $1",
+		sessionID, string(data))
+	return err
 }
 
 func (r *postgresSessionRepo) ListByUser(ctx context.Context, userID uuid.UUID) ([]SessionSummaryRow, error) {
