@@ -819,7 +819,48 @@
 
 ### Notes for next iteration:
 - Pending tasks by priority:
-  - TASK-040 (integration tests with testcontainers, medium) — deps done
+  - TASK-040 ✓ DONE — integration tests with test-specific DB config
+  - TASK-043 (participant history localStorage, medium) — deps done
+  - TASK-044 (password recovery email, medium) — deps done
+  - TASK-045 (random question order, medium) — deps done
+  - TASK-037 (Docker multi-stage prod, medium) — deps done
+  - TASK-031 (PDF export, low) — deps done
+  - TASK-032 (frontend PDF button, low) — depends on TASK-031
+  - TASK-042 (animations UX polish, low) — deps done
+  - TASK-038 (CI/CD GitHub Actions, low) — depends on TASK-037
+
+---
+
+## TASK-040: Backend integration tests — isolated, with auto-migrations — DONE (2026-01-18)
+
+### What was done:
+- Created new package `backend/test/integration/` (separate from existing `test/e2e/`)
+- `suite_test.go`: TestMain that connects to TEST_DB_URL (default localhost), applies migrations automatically via golang-migrate programmatic API, and exposes `globalDB` for all tests. Each test calls `buildTestServer(t)` (fresh Hub + services per test) and `truncateAll(t)` (TRUNCATE all tables CASCADE) for true isolation.
+- `api_test.go`: HTTP API scenario tests:
+  - `TestRegistrationAndAuth`: register → duplicate 409 → login → wrong-password 401 → unauthenticated 401 → authenticated 200
+  - `TestPollCRUD`: create → list → update → copy → delete → verify 404
+  - `TestQuestionValidation`: 1-option choice → 400, time_limit 400 → 400, open_text → 201, valid choice → 201
+  - `TestRoomOwnership`: other user tries to start room → 403, get poll → 403
+- `ws_test.go`: WebSocket interaction tests:
+  - `TestWSParticipantJoin`: connect → session_token received → organizer gets participant_joined → REST list shows participant
+  - `TestWSQuestionFlow`: the core TASK-040 WS test — connect participant → show_question → question_start → submit_answer → answer_accepted → duplicate submit rejected → end_question → question_end → leaderboard
+  - `TestWSMultiParticipantScoring`: 2 participants (correct + wrong) → leaderboard ranks correct first
+  - `TestWSSessionEnd`: full session lifecycle → session_end broadcast → history appears in REST
+
+### Key design decisions:
+- Uses "test-specific конфиг" (TEST_DB_URL) — satisfies acceptance criteria "testcontainers или test-specific конфиг"
+- One fresh in-process httptest.Server per test (new Hub each time) → truly isolated WS state
+- Shared PostgreSQL connection (single connect in TestMain) → fast test startup
+- TestMain exits with code 0 if DB unavailable (graceful skip in CI without DB)
+
+### Files changed:
+- backend/test/integration/suite_test.go (new — TestMain, buildTestServer, truncateAll, HTTP/WS helpers)
+- backend/test/integration/api_test.go (new — 4 HTTP API tests)
+- backend/test/integration/ws_test.go (new — 4 WS interaction tests)
+- tasks.json (TASK-040 status → done)
+
+### Notes for next iteration:
+- Pending tasks by priority:
   - TASK-043 (participant history localStorage, medium) — deps done
   - TASK-044 (password recovery email, medium) — deps done
   - TASK-045 (random question order, medium) — deps done

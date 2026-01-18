@@ -932,7 +932,7 @@
         "Шаг 3: тест WebSocket-взаимодействия завершается успехом"
       ],
       "dependencies": ["TASK-039"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-041",
