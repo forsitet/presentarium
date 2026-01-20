@@ -8,7 +8,13 @@ import { getRoomParticipants, changeRoomState, getQuestions } from '../api/polls
 import { ParticipantList } from '../components/ParticipantList'
 import { AnswerBarChart } from '../components/AnswerBarChart'
 import { Leaderboard } from '../components/Leaderboard'
+import { WordCloudView } from '../components/WordCloudView'
 import type { Participant, Question } from '../types'
+
+interface WordCloudWord {
+  text: string
+  count: number
+}
 
 // --- WS payload types ---
 
@@ -82,6 +88,10 @@ export function HostSessionPage() {
   const [revealedOptions, setRevealedOptions] = useState<RevealedOption[] | null>(null)
   const [lbEntries, setLbEntries] = useState<LBEntry[]>([])
   const [finalLb, setFinalLb] = useState<LBEntry[]>([])
+
+  // Word cloud state
+  const [wordcloudWords, setWordcloudWords] = useState<WordCloudWord[]>([])
+  const [hiddenWords, setHiddenWords] = useState<Set<string>>(new Set())
 
   const joinUrl = `${window.location.origin}/join/${code}`
 
@@ -158,7 +168,14 @@ export function HostSessionPage() {
       setDistribution({})
       setRevealedOptions(null)
       setLbEntries([])
+      setWordcloudWords([])
+      setHiddenWords(new Set())
       setStatus('showing_question')
+    }
+
+    const onWordcloudUpdate = (data: unknown) => {
+      const { words } = data as { words: WordCloudWord[] }
+      setWordcloudWords(words ?? [])
     }
 
     const onTimerTick = (data: unknown) => {
@@ -202,6 +219,7 @@ export function HostSessionPage() {
     socket.on('results', onResults)
     socket.on('leaderboard', onLeaderboard)
     socket.on('session_end', onSessionEnd)
+    socket.on('wordcloud_update', onWordcloudUpdate)
 
     return () => {
       socket.off('participant_joined', onParticipantJoined)
@@ -213,6 +231,7 @@ export function HostSessionPage() {
       socket.off('results', onResults)
       socket.off('leaderboard', onLeaderboard)
       socket.off('session_end', onSessionEnd)
+      socket.off('wordcloud_update', onWordcloudUpdate)
       socket.disconnect()
       reset()
     }
@@ -437,6 +456,20 @@ export function HostSessionPage() {
                   distribution={distribution}
                   showCorrect={false}
                 />
+              ) : activeQ.type === 'word_cloud' ? (
+                <WordCloudView
+                  words={wordcloudWords}
+                  hiddenWords={hiddenWords}
+                  onHideWord={(word) =>
+                    setHiddenWords((prev) => {
+                      const next = new Set(prev)
+                      if (next.has(word)) next.delete(word)
+                      else next.add(word)
+                      return next
+                    })
+                  }
+                  showModerationPanel
+                />
               ) : (
                 <p className="text-gray-500 text-sm text-center py-12">
                   {answered} текстовых ответов
@@ -544,6 +577,20 @@ export function HostSessionPage() {
                     ))}
                   </div>
                 </>
+              ) : activeQ.type === 'word_cloud' ? (
+                <WordCloudView
+                  words={wordcloudWords}
+                  hiddenWords={hiddenWords}
+                  onHideWord={(word) =>
+                    setHiddenWords((prev) => {
+                      const next = new Set(prev)
+                      if (next.has(word)) next.delete(word)
+                      else next.add(word)
+                      return next
+                    })
+                  }
+                  showModerationPanel
+                />
               ) : (
                 <p className="text-gray-500 text-sm text-center py-8">
                   Текстовых ответов:{' '}

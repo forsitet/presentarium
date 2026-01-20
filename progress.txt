@@ -617,6 +617,40 @@
 ### Notes for next iteration:
 - TASK-046 (E2E full scenario, HIGH) — now unblocked (deps: TASK-030 ✓, TASK-029 ✓, TASK-034 ✓)
 - TASK-043 (participant history localStorage) — now unblocked (deps: TASK-028 ✓, TASK-034 ✓)
-- TASK-023 (frontend word cloud) — medium, all deps done
+- TASK-023 ✓ DONE — word cloud UI implemented
 - TASK-025 (frontend brainstorm UI) — medium, all deps done
 - TASK-033 (real-time stats organizer) — medium, all deps done
+
+---
+
+## TASK-023: Frontend word cloud visualization — DONE (2026-01-20)
+
+### What was done:
+- Created `frontend/src/components/WordCloudView.tsx`:
+  - Uses `react-wordcloud` with `size={[560, 256]}` for consistent rendering
+  - Props: `words: {text, count}[]`, `hiddenWords: Set<string>`, `onHideWord`, `showModerationPanel`
+  - Maps `count → value` for react-wordcloud's word weight API
+  - Filters hidden words before passing to the cloud renderer
+  - Empty state: "Ждём ответов участников..."
+  - Moderation panel (when `showModerationPanel=true`): word pills sorted by freq with ✕/👁 hide toggle buttons
+  - Color palette: indigo/violet/pink/orange/green/blue/yellow
+- Updated `frontend/src/pages/HostSessionPage.tsx`:
+  - Added `WordCloudWord` interface `{text, count}`
+  - Added `wordcloudWords: WordCloudWord[]` and `hiddenWords: Set<string>` state
+  - Added `onWordcloudUpdate` WS handler: `socket.on('wordcloud_update', ...)` → updates `wordcloudWords`
+  - Handler registered/deregistered in the main WS useEffect
+  - `onQuestionStart` resets `wordcloudWords` and `hiddenWords` on each new question
+  - In `showing_question` section: `word_cloud` type shows `<WordCloudView ... showModerationPanel />` instead of "N текстовых ответов"
+  - In `showing_results` section: same `<WordCloudView>` with moderation panel
+  - Hide toggle: `setHiddenWords(prev => new Set(prev).add/delete(word))`
+- Participant side already handled: `ParticipantSessionPage.tsx` uses `TextInput` with `maxLength=50` for word_cloud type (implemented in TASK-021)
+
+### Files changed:
+- frontend/src/components/WordCloudView.tsx (new)
+- frontend/src/pages/HostSessionPage.tsx (WordCloudView import, wordcloudWords/hiddenWords state, onWordcloudUpdate handler, WordCloudView in showing_question + showing_results)
+- tasks.json (TASK-023 status → done)
+
+### Notes for next iteration:
+- TASK-025 (frontend brainstorm UI) — medium priority, all deps done; needs BrainstormInput.tsx, BrainstormBoard.tsx
+- TASK-033 (real-time stats organizer) — medium priority, all deps done
+- TASK-046 (E2E, HIGH) — all deps done
