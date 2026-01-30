@@ -49,6 +49,10 @@ type Room struct {
 	totalResponseMs    int            // sum of response times in ms (for average calculation)
 	wordCloudFreq      map[string]int // per-question word frequency for word_cloud questions
 
+	// questionOrder holds the session-specific order of question IDs.
+	// Set once when the session starts (shuffled for "random" polls).
+	questionOrder []uuid.UUID
+
 	// Brainstorm in-memory state (reset on each brainstorm question start).
 	brainstormPhase      string              // collecting | voting | results
 	brainstormIdeaCounts map[uuid.UUID]int   // participantID -> idea count
@@ -200,6 +204,28 @@ func (r *Room) StopCurrentTimer() {
 		default:
 		}
 	}
+}
+
+// SetQuestionOrder stores the ordered list of question IDs for this session.
+// Called once when the session starts (after optional shuffle).
+func (r *Room) SetQuestionOrder(order []uuid.UUID) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	cp := make([]uuid.UUID, len(order))
+	copy(cp, order)
+	r.questionOrder = cp
+}
+
+// GetQuestionOrder returns a copy of the session-specific question order.
+func (r *Room) GetQuestionOrder() []uuid.UUID {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if len(r.questionOrder) == 0 {
+		return nil
+	}
+	cp := make([]uuid.UUID, len(r.questionOrder))
+	copy(cp, r.questionOrder)
+	return cp
 }
 
 // SessionID returns the database session ID for this room.

@@ -65,7 +65,7 @@ func main() {
 	hub := ws.NewHub()
 	wsHandler := ws.NewHandler(hub, cfg.JWTSecret)
 
-	roomSvc := service.NewRoomService(sessionRepo, pollRepo, hub)
+	roomSvc := service.NewRoomService(sessionRepo, pollRepo, questionRepo, hub)
 	participantSvc := service.NewParticipantService(participantRepo, sessionRepo, hub)
 	conductSvc := service.NewConductService(questionRepo, sessionRepo, pollRepo, answerRepo, brainstormRepo, hub)
 	historySvc := service.NewHistoryService(sessionRepo, answerRepo, participantRepo, questionRepo)
