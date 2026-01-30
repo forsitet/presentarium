@@ -901,7 +901,45 @@
 
 ### Notes for next iteration:
 - TASK-044 (password recovery email, medium) — deps done; needs SMTP config
-- TASK-045 (random question order, medium) — backend only; deps done
+- TASK-037 (Docker multi-stage prod, medium) — deps done; verify backend image < 30 MB
+- TASK-031 (PDF export, low) — deps done; needs gofpdf library
+- TASK-042 (animations UX polish, low) — deps done
+
+---
+
+## TASK-045: Backend random question order (Fisher-Yates shuffle) — DONE (2026-01-30)
+
+### What was done:
+- `backend/internal/ws/messages.go`: added `MsgTypeRoomStarted = "room_started"` constant and `RoomStartedData` struct (`QuestionOrder []uuid.UUID`) so the server can notify the organizer of the shuffled question order
+- `backend/internal/ws/room.go`: added `questionOrder []uuid.UUID` field to `Room` struct; added thread-safe `SetQuestionOrder` and `GetQuestionOrder` methods
+- `backend/internal/service/room_service.go`:
+  - Added `questionRepo repository.QuestionRepository` field to `roomService`
+  - Updated `NewRoomService` signature to accept `questionRepo`
+  - In `ChangeState("start")`: calls new `applyQuestionOrder` helper
+  - `applyQuestionOrder`: fetches questions via `questionRepo.ListByPoll`, runs `shuffleUUIDs` (Fisher-Yates) if `poll.question_order == "random"`, saves to DB via `sessionRepo.SaveQuestionOrder`, stores in Room, broadcasts `room_started` to organizer
+  - `shuffleUUIDs`: Fisher-Yates shuffle using `math/rand/v2.IntN`
+  - Imports: aliased `crypto/rand` as `crand` and `math/rand/v2` as `mrand` to avoid name collision
+- `backend/cmd/server/main.go`: passes `questionRepo` to `NewRoomService`
+- `backend/test/e2e/quiz_scenario_test.go`: updated `NewRoomService` call with `questionRepo`
+- `backend/test/integration/suite_test.go`: updated `NewRoomService` call with `questionRepo`
+- `frontend/src/pages/HostSessionPage.tsx`:
+  - Added `questionOrder: string[]` state
+  - Handles `room_started` WS message → sets `questionOrder`
+  - Updated `nextQuestion` useMemo: uses `questionOrder` index when available (for both random and sequential polls), falls back to position-based sort
+  - ACTIVE state's `firstQ` uses `questionOrder[0]` when available
+
+### Files changed:
+- backend/internal/ws/messages.go (MsgTypeRoomStarted, RoomStartedData)
+- backend/internal/ws/room.go (questionOrder field + SetQuestionOrder/GetQuestionOrder)
+- backend/internal/service/room_service.go (questionRepo, applyQuestionOrder, shuffleUUIDs)
+- backend/cmd/server/main.go (pass questionRepo to NewRoomService)
+- backend/test/e2e/quiz_scenario_test.go (update NewRoomService call)
+- backend/test/integration/suite_test.go (update NewRoomService call)
+- frontend/src/pages/HostSessionPage.tsx (room_started handler, questionOrder state, nextQuestion logic)
+- tasks.json (TASK-045 status → done)
+
+### Notes for next iteration:
+- TASK-044 (password recovery email, medium) — deps done; needs SMTP config + email sending library
 - TASK-037 (Docker multi-stage prod, medium) — deps done; verify backend image < 30 MB
 - TASK-031 (PDF export, low) — deps done; needs gofpdf library
 - TASK-042 (animations UX polish, low) — deps done

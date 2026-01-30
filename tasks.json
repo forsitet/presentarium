@@ -1042,7 +1042,7 @@
         "Шаг 3: создать опрос с question_order='sequential' → вопросы идут по position"
       ],
       "dependencies": ["TASK-017"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-046",

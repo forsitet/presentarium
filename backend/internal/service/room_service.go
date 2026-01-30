@@ -2,9 +2,11 @@ package service
 
 import (
 	"context"
-	"crypto/rand"
+	crand "crypto/rand"
 	"fmt"
+	"log/slog"
 	"math/big"
+	mrand "math/rand/v2"
 	"strings"
 	"time"
 
@@ -38,17 +40,24 @@ type RoomInfoResponse struct {
 }
 
 type roomService struct {
-	sessionRepo repository.SessionRepository
-	pollRepo    repository.PollRepository
-	hub         *ws.Hub
+	sessionRepo  repository.SessionRepository
+	pollRepo     repository.PollRepository
+	questionRepo repository.QuestionRepository
+	hub          *ws.Hub
 }
 
 // NewRoomService creates a new RoomService.
-func NewRoomService(sessionRepo repository.SessionRepository, pollRepo repository.PollRepository, hub *ws.Hub) RoomService {
+func NewRoomService(
+	sessionRepo repository.SessionRepository,
+	pollRepo repository.PollRepository,
+	questionRepo repository.QuestionRepository,
+	hub *ws.Hub,
+) RoomService {
 	return &roomService{
-		sessionRepo: sessionRepo,
-		pollRepo:    pollRepo,
-		hub:         hub,
+		sessionRepo:  sessionRepo,
+		pollRepo:     pollRepo,
+		questionRepo: questionRepo,
+		hub:          hub,
 	}
 }
 
@@ -177,6 +186,10 @@ func (s *roomService) ChangeState(ctx context.Context, userID uuid.UUID, code, a
 		switch newStatus {
 		case "active":
 			room.SetState(ws.StateActive)
+
+			// Determine session question order (sequential or random) and persist it.
+			s.applyQuestionOrder(ctx, session.ID, session.PollID, poll.QuestionOrder, room)
+
 		case "finished":
 			room.SetState(ws.StateFinished)
 		}
@@ -185,9 +198,57 @@ func (s *roomService) ChangeState(ctx context.Context, userID uuid.UUID, code, a
 	return nil
 }
 
+// applyQuestionOrder fetches questions, optionally shuffles them, saves the order to
+// the sessions table, stores it in the Room, and broadcasts room_started to the organizer.
+func (s *roomService) applyQuestionOrder(
+	ctx context.Context,
+	sessionID, pollID uuid.UUID,
+	pollQuestionOrder string,
+	room *ws.Room,
+) {
+	questions, err := s.questionRepo.ListByPoll(ctx, pollID)
+	if err != nil {
+		slog.Warn("applyQuestionOrder: failed to list questions", "poll_id", pollID, "err", err)
+		return
+	}
+	if len(questions) == 0 {
+		return
+	}
+
+	ids := make([]uuid.UUID, len(questions))
+	for i, q := range questions {
+		ids[i] = q.ID
+	}
+
+	if pollQuestionOrder == "random" {
+		shuffleUUIDs(ids)
+	}
+
+	// Persist order to DB.
+	if err := s.sessionRepo.SaveQuestionOrder(ctx, sessionID, ids); err != nil {
+		slog.Warn("applyQuestionOrder: failed to save question order", "session_id", sessionID, "err", err)
+	}
+
+	// Store in Room for in-process access.
+	room.SetQuestionOrder(ids)
+
+	// Notify the organizer so the frontend can step through questions in order.
+	if msg, err := ws.NewEnvelope(ws.MsgTypeRoomStarted, ws.RoomStartedData{QuestionOrder: ids}); err == nil {
+		room.SendToOrganizer(msg)
+	}
+}
+
+// shuffleUUIDs performs a Fisher-Yates in-place shuffle.
+func shuffleUUIDs(ids []uuid.UUID) {
+	for i := len(ids) - 1; i > 0; i-- {
+		j := mrand.IntN(i + 1)
+		ids[i], ids[j] = ids[j], ids[i]
+	}
+}
+
 // generateRoomCode returns a random 6-digit numeric string (100000–999999).
 func generateRoomCode() (string, error) {
-	n, err := rand.Int(rand.Reader, big.NewInt(900000))
+	n, err := crand.Int(crand.Reader, big.NewInt(900000))
 	if err != nil {
 		return "", err
 	}

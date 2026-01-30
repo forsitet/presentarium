@@ -93,6 +93,9 @@ export function HostSessionPage() {
   const [lbEntries, setLbEntries] = useState<LBEntry[]>([])
   const [finalLb, setFinalLb] = useState<LBEntry[]>([])
 
+  // Session question order (received via room_started WS; empty = sequential by position)
+  const [questionOrder, setQuestionOrder] = useState<string[]>([])
+
   // Word cloud state
   const [wordcloudWords, setWordcloudWords] = useState<WordCloudWord[]>([])
   const [hiddenWords, setHiddenWords] = useState<Set<string>>(new Set())
@@ -105,14 +108,23 @@ export function HostSessionPage() {
     getQuestions(pollId).then(setQuestions).catch(() => {})
   }, [pollId])
 
-  // Find next question to show after the current one
+  // Find next question to show after the current one.
+  // Uses server-provided questionOrder when available (random or sequential shuffled order),
+  // falls back to position-based sort otherwise.
   const nextQuestion = useMemo<Question | null>(() => {
     if (!questions.length) return null
+    if (questionOrder.length > 0) {
+      if (!activeQ) return questions.find((q) => q.id === questionOrder[0]) ?? null
+      const currentIdx = questionOrder.indexOf(activeQ.question_id)
+      if (currentIdx < 0 || currentIdx >= questionOrder.length - 1) return null
+      return questions.find((q) => q.id === questionOrder[currentIdx + 1]) ?? null
+    }
+    // Fallback: sequential by position
     if (!activeQ) return questions.slice().sort((a, b) => a.position - b.position)[0] ?? null
     const sorted = questions.slice().sort((a, b) => a.position - b.position)
     const idx = sorted.findIndex((q) => q.position > activeQ.position)
     return idx >= 0 ? sorted[idx] : null
-  }, [questions, activeQ])
+  }, [questions, activeQ, questionOrder])
 
   const handleCopy = useCallback(() => {
     navigator.clipboard.writeText(joinUrl).then(() => {
@@ -232,6 +244,11 @@ export function HostSessionPage() {
       setStatus('showing_results')
     }
 
+    const onRoomStarted = (data: unknown) => {
+      const { question_order } = data as { question_order?: string[] }
+      if (Array.isArray(question_order)) setQuestionOrder(question_order)
+    }
+
     const onSessionEnd = (data: unknown) => {
       const { rankings } = data as { rankings: LBEntry[] }
       setFinalLb(rankings)
@@ -240,6 +257,7 @@ export function HostSessionPage() {
 
     socket.on('participant_joined', onParticipantJoined)
     socket.on('participant_left', onParticipantLeft)
+    socket.on('room_started', onRoomStarted)
     socket.on('question_start', onQuestionStart)
     socket.on('timer_tick', onTimerTick)
     socket.on('answer_count', onAnswerCount)
@@ -252,6 +270,7 @@ export function HostSessionPage() {
     return () => {
       socket.off('participant_joined', onParticipantJoined)
       socket.off('participant_left', onParticipantLeft)
+      socket.off('room_started', onRoomStarted)
       socket.off('question_start', onQuestionStart)
       socket.off('timer_tick', onTimerTick)
       socket.off('answer_count', onAnswerCount)
@@ -344,7 +363,9 @@ export function HostSessionPage() {
   // ACTIVE — session started, ready to show first question
   // ════════════════════════════════════════════════════════════════
   if (roomStatus === 'active') {
-    const firstQ = questions.slice().sort((a, b) => a.position - b.position)[0] ?? null
+    const firstQ = questionOrder.length > 0
+      ? (questions.find((q) => q.id === questionOrder[0]) ?? null)
+      : (questions.slice().sort((a, b) => a.position - b.position)[0] ?? null)
     return (
       <div className="min-h-screen bg-gray-900 text-white flex flex-col">
         <div className="bg-gray-800 border-b border-gray-700 px-6 py-4 flex items-center justify-between">

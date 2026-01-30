@@ -11,6 +11,7 @@ const (
 	MsgTypeConnected              = "connected"
 	MsgTypeParticipantJoined      = "participant_joined"
 	MsgTypeParticipantLeft        = "participant_left"
+	MsgTypeRoomStarted            = "room_started"
 	MsgTypeQuestionStart          = "question_start"
 	MsgTypeTimerTick              = "timer_tick"
 	MsgTypeQuestionEnd            = "question_end"
@@ -60,6 +61,12 @@ func NewEnvelope(msgType string, data interface{}) ([]byte, error) {
 }
 
 // --- Outgoing data payloads ---
+
+// RoomStartedData is sent to the organizer when the session transitions to active.
+// It carries the ordered list of question IDs the organizer should step through.
+type RoomStartedData struct {
+	QuestionOrder []uuid.UUID `json:"question_order"`
+}
 
 // ConnectedData is sent to a client upon successful connection.
 type ConnectedData struct {
