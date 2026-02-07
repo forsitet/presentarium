@@ -15,6 +15,7 @@ import (
 // RouterDeps holds dependencies needed to build the router.
 type RouterDeps struct {
 	AuthService         service.AuthService
+	PollService         service.PollService
 	JWTSecret           string
 	RefreshTokenTTLDays int
 }
@@ -33,6 +34,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 	authLimiter := appmw.NewRateLimiter(5, time.Minute)
 
 	authH := newAuthHandler(deps.AuthService, deps.RefreshTokenTTLDays)
+	pollH := newPollHandler(deps.PollService)
 
 	r.Route("/api", func(r chi.Router) {
 		r.Route("/auth", func(r chi.Router) {
@@ -47,8 +49,15 @@ func NewRouter(deps RouterDeps) http.Handler {
 		r.Group(func(r chi.Router) {
 			r.Use(appmw.Auth(deps.JWTSecret))
 
-			// Poll routes (added in subsequent tasks)
-			r.Route("/polls", func(r chi.Router) {})
+			// Poll routes
+			r.Route("/polls", func(r chi.Router) {
+				r.Get("/", pollH.handleList)
+				r.Post("/", pollH.handleCreate)
+				r.Get("/{id}", pollH.handleGet)
+				r.Put("/{id}", pollH.handleUpdate)
+				r.Delete("/{id}", pollH.handleDelete)
+				r.Post("/{id}/copy", pollH.handleCopy)
+			})
 
 			// Upload routes (added in subsequent tasks)
 			r.Route("/upload", func(r chi.Router) {})
