@@ -34,15 +34,19 @@ func main() {
 	slog.Info("connected to database")
 
 	userRepo := repository.NewPostgresUserRepo(db)
+	pollRepo := repository.NewPostgresPollRepo(db)
+
 	authSvc := service.NewAuthService(
 		userRepo,
 		cfg.JWTSecret,
 		cfg.JWTAccessTokenTTL,
 		cfg.JWTRefreshTokenTTL,
 	)
+	pollSvc := service.NewPollService(pollRepo)
 
 	router := handler.NewRouter(handler.RouterDeps{
 		AuthService:         authSvc,
+		PollService:         pollSvc,
 		JWTSecret:           cfg.JWTSecret,
 		RefreshTokenTTLDays: cfg.JWTRefreshTokenTTL,
 	})

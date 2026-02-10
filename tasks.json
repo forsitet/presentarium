@@ -180,7 +180,7 @@
         "Шаг 6: DELETE /api/polls/:id → 204; GET /api/polls/:id → 404"
       ],
       "dependencies": ["TASK-005"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-008",

@@ -119,6 +119,31 @@
 
 ---
 
+### 2026-02-10 16:00 — TASK-007: Backend CRUD опросов (polls) с авторизацией
+**Что сделано:**
+- internal/repository/poll_repo.go: PollRepository interface + PostgresImpl (Create, GetByID, ListByUser, Update, Delete)
+- internal/service/poll_service.go: PollService interface + pollService (Create, Get, List, Update, Delete, Copy). Проверка owner через userID, Copy добавляет suffix "(Копия)".
+- internal/handler/poll_handler.go: pollHandler с handleList, handleCreate, handleGet, handleUpdate, handleDelete, handleCopy. go-playground/validator для входных данных.
+- internal/handler/routes.go: добавлен PollService в RouterDeps, зарегистрированы все 6 маршрутов /api/polls/*.
+- cmd/server/main.go: инициализация pollRepo + pollSvc, передача в RouterDeps.
+
+**Изменённые файлы:**
+- backend/internal/repository/poll_repo.go (новый)
+- backend/internal/service/poll_service.go (новый)
+- backend/internal/handler/poll_handler.go (новый)
+- backend/internal/handler/routes.go (обновлён)
+- backend/cmd/server/main.go (обновлён)
+- tasks.json (TASK-007 status → done)
+
+**Статус:** done
+
+**Следующие доступные critical задачи:**
+- TASK-004 (Frontend React init, deps: TASK-001 ✓)
+- TASK-008 (CRUD questions, deps: TASK-007 ✓)
+- TASK-012 (WebSocket Hub, deps: TASK-003 ✓)
+
+---
+
 <!-- Агенты записывают сюда свои summary по формату:
 ### YYYY-MM-DD HH:MM — TASK-XXX: [название задачи]
 **Что сделано:** ...
