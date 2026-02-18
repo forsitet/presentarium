@@ -146,3 +146,36 @@
 - TASK-016 (high): JoinPage with auto-reconnect — all deps done
 - TASK-020 (high): HostSessionPage quiz state — all deps done
 - TASK-035 (high): Backend CORS/logging/rate-limit middleware — all deps done
+
+---
+
+## TASK-016: Frontend JoinPage + ParticipantSessionPage — DONE (2026-02-18)
+
+### What was done:
+- Fixed `frontend/src/ws/socket.ts`: reset `maxReconnects = 5` in `connect()` to ensure reconnect works after a previous `disconnect()` call
+- Implemented full `frontend/src/pages/JoinPage.tsx`:
+  - react-hook-form + zod validation (6-digit code, name 2-30 chars)
+  - Connects WebSocket as participant (no JWT — only name in query param)
+  - Waits for `connected` WS message → navigates to `/session/:code`
+  - 5-second timeout fallback → shows error + disconnects
+  - Code input pre-filled from URL param `/join/:code`
+  - Spinner button during connection attempt
+- Created `frontend/src/pages/ParticipantSessionPage.tsx`:
+  - Redirects to `/join/:code` if no `session_token` in localStorage (handles page refresh without prior join)
+  - Calls `socket.connect()` on mount to restore connection after page refresh (session_token auto-sent from localStorage)
+  - Waiting state: dual-ring spinner animation + bouncing dots + "Ждём начала..." copy
+  - Listens for `room_state_changed` and `session_end` WS events
+  - Finished state: "Опрос завершён!" screen with "На главную" button
+- Updated `frontend/src/routes/index.tsx`: added `/session/:code` → ParticipantSessionPage (public route)
+
+### Files changed:
+- frontend/src/ws/socket.ts (bug fix: reset maxReconnects in connect())
+- frontend/src/pages/JoinPage.tsx (full implementation)
+- frontend/src/pages/ParticipantSessionPage.tsx (new — waiting + finished states)
+- frontend/src/routes/index.tsx (added /session/:code route)
+- tasks.json (TASK-016 status → done)
+
+### Notes for next iteration:
+- Next: TASK-020 (high) — HostSessionPage quiz state (showing_question, results, leaderboard) — all deps done
+- TASK-021 (high) — ParticipantSessionPage question/answer UI — depends on TASK-016 ✓ and TASK-019 ✓
+- TASK-035 (high) — Backend CORS/logging/rate-limit middleware — depends on TASK-005 ✓
