@@ -79,6 +79,13 @@ export const router = createBrowserRouter([
     },
   },
   {
+    path: 'session/:code',
+    lazy: async () => {
+      const { ParticipantSessionPage } = await import('../pages/ParticipantSessionPage')
+      return { Component: ParticipantSessionPage }
+    },
+  },
+  {
     path: '*',
     element: <Navigate to="/dashboard" replace />,
   },
