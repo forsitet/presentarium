@@ -15,6 +15,7 @@ class WSSocket {
     this.token = token || ''
     this.name = name || ''
     this.reconnectAttempts = 0
+    this.maxReconnects = 5
     this._connect()
   }
 
