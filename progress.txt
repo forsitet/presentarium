@@ -213,3 +213,40 @@
 - Next: TASK-021 (high) — ParticipantSessionPage question/answer screen — all deps done (TASK-016 ✓, TASK-019 ✓)
 - TASK-021 needs: question_start → show question+options+timer; answer submission; answer_accepted state; question_end → show correct/wrong + score + rank
 - TASK-035 (high) — Backend CORS/logging/rate-limit middleware — depends on TASK-005 ✓
+
+---
+
+## TASK-021: ParticipantSessionPage — question/answer UI — DONE (2026-03-11)
+
+### What was done:
+- Fully implemented `frontend/src/pages/ParticipantSessionPage.tsx` with all quiz states:
+  - **waiting/active**: animated spinner screen (unchanged)
+  - **showing_question**: question text, timer progress bar (green→yellow→red), answer inputs per type
+  - **answer submitted**: "Ответ принят!" overlay, buttons blocked
+  - **showing_results**: correct/wrong option highlighting (green/red), earned score badge, rank display
+  - **finished**: trophy screen with podium top-3, full ranked list, final score
+
+### Components implemented (inline):
+- `SingleChoiceInput`: 2-6 Kahoot-style colored buttons (▲◆●■★♥), one tap = submitted
+- `MultipleChoiceInput`: checkboxes grid + "Подтвердить (N)" button
+- `TextInput`: textarea with char counter + send button, supports open_text and word_cloud (max 50 chars)
+- `TimerBar`: animated progress bar with color transition
+- `ResultsScreen`: per-option correct/wrong coloring (green=correct, red=selected-wrong), rank + score
+- `FinalScreen`: trophy emoji, my_rank + my_score, podium (🥇🥈🥉), ranked list top-10
+
+### WS events handled:
+- `question_start` → reset all state, show question
+- `timer_tick` → update countdown
+- `answer_accepted` → record score/is_correct
+- `question_end` → reveal options with is_correct flags, switch to results view
+- `leaderboard` → update my_rank + my_score
+- `session_end` → final rankings + final screen
+
+### Files changed:
+- frontend/src/pages/ParticipantSessionPage.tsx (full rewrite)
+- tasks.json (TASK-021 status → done)
+
+### Notes for next iteration:
+- Next high priorities: TASK-022 (word cloud backend), TASK-035 (CORS/logging middleware), TASK-024 (brainstorm backend)
+- TASK-034 (participant finish screens) is now unblocked — but FinalScreen is partially covered in TASK-021 already
+- TASK-033 (real-time stats for organizer) is also unblocked

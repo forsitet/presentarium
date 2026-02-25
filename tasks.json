@@ -507,7 +507,7 @@
         "Шаг 6: таймер достигает 0 → ответы невозможно отправить"
       ],
       "dependencies": ["TASK-016", "TASK-019"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-022",
