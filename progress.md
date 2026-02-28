@@ -3,9 +3,9 @@
 ## Статус проекта
 
 **Всего задач:** 46
-**Выполнено:** 7
+**Выполнено:** 8
 **В работе:** 0
-**Ожидает:** 39
+**Ожидает:** 38
 
 ## Сессии работы агентов
 
@@ -201,6 +201,34 @@
 **ВАЖНО для следующей итерации:** перед `go build` выполни `go mod tidy` в backend/. Следующая доступная critical задача: TASK-013 (Backend: создание и управление сессиями, deps: TASK-012 ✓ + TASK-007 ✓).
 
 **Статус:** done
+
+---
+
+### 2026-03-09 17:00 — TASK-013: Backend: создание и управление сессиями (комнатами)
+**Что сделано:**
+- internal/repository/session_repo.go: SessionRepository interface + PostgresImpl (Create, GetByCode, GetActiveByPoll, UpdateStatus). GetActiveByPoll использует `status <> 'finished'` для partial-uniqueness проверки.
+- internal/service/room_service.go: RoomService interface + roomService (CreateRoom, GetRoom, ChangeState). CreateRoom: проверяет владельца опроса, проверяет наличие активной комнаты (ErrConflict), генерирует случайный 6-значный код (crypto/rand, retry на 23505), инициализирует Room в Hub. ChangeState: проверяет владельца, обновляет status в БД и синхронизирует state в Hub (active/finished).
+- internal/handler/room_handler.go: roomHandler с handleCreate, handleGet, handleChangeState. Корректная обработка errs.ErrConflict → 409.
+- internal/handler/routes.go: добавлен RoomService в RouterDeps, зарегистрированы маршруты POST/GET/PATCH /api/rooms/*.
+- cmd/server/main.go: инициализация sessionRepo + roomSvc, передача в RouterDeps.
+
+**Маршруты:**
+- POST /api/rooms (JWT required)
+- GET /api/rooms/{code} (JWT required)
+- PATCH /api/rooms/{code}/state (JWT required)
+
+**Изменённые файлы:**
+- backend/internal/repository/session_repo.go (новый)
+- backend/internal/service/room_service.go (новый)
+- backend/internal/handler/room_handler.go (новый)
+- backend/internal/handler/routes.go (обновлён)
+- backend/cmd/server/main.go (обновлён)
+- tasks.json (TASK-013 status → done)
+
+**Статус:** done
+
+**Следующие доступные critical задачи:**
+- TASK-014 (Backend: подключение участников через WebSocket, deps: TASK-013 ✓)
 
 ---
 

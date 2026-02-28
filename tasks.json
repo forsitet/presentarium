@@ -321,7 +321,7 @@
         "Шаг 6: после завершения POST /api/rooms с тем же poll_id → 201 (новая комната создаётся)"
       ],
       "dependencies": ["TASK-012", "TASK-007"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-014",
