@@ -18,6 +18,7 @@ type RouterDeps struct {
 	AuthService         service.AuthService
 	PollService         service.PollService
 	QuestionService     service.QuestionService
+	RoomService         service.RoomService
 	WSHandler           *ws.Handler
 	JWTSecret           string
 	RefreshTokenTTLDays int
@@ -44,6 +45,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 	authH := newAuthHandler(deps.AuthService, deps.RefreshTokenTTLDays)
 	pollH := newPollHandler(deps.PollService)
 	questionH := newQuestionHandler(deps.QuestionService)
+	roomH := newRoomHandler(deps.RoomService)
 
 	r.Route("/api", func(r chi.Router) {
 		r.Route("/auth", func(r chi.Router) {
@@ -80,8 +82,12 @@ func NewRouter(deps RouterDeps) http.Handler {
 			// Upload routes (added in subsequent tasks)
 			r.Route("/upload", func(r chi.Router) {})
 
-			// Room routes (added in subsequent tasks)
-			r.Route("/rooms", func(r chi.Router) {})
+			// Room routes
+			r.Route("/rooms", func(r chi.Router) {
+				r.Post("/", roomH.handleCreate)
+				r.Get("/{code}", roomH.handleGet)
+				r.Patch("/{code}/state", roomH.handleChangeState)
+			})
 		})
 	})
 

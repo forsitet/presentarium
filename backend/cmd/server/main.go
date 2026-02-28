@@ -37,6 +37,7 @@ func main() {
 	userRepo := repository.NewPostgresUserRepo(db)
 	pollRepo := repository.NewPostgresPollRepo(db)
 	questionRepo := repository.NewPostgresQuestionRepo(db)
+	sessionRepo := repository.NewPostgresSessionRepo(db)
 
 	authSvc := service.NewAuthService(
 		userRepo,
@@ -50,10 +51,13 @@ func main() {
 	hub := ws.NewHub()
 	wsHandler := ws.NewHandler(hub, cfg.JWTSecret)
 
+	roomSvc := service.NewRoomService(sessionRepo, pollRepo, hub)
+
 	router := handler.NewRouter(handler.RouterDeps{
 		AuthService:         authSvc,
 		PollService:         pollSvc,
 		QuestionService:     questionSvc,
+		RoomService:         roomSvc,
 		WSHandler:           wsHandler,
 		JWTSecret:           cfg.JWTSecret,
 		RefreshTokenTTLDays: cfg.JWTRefreshTokenTTL,
