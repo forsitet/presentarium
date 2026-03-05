@@ -207,3 +207,18 @@ func (r *Room) Organizer() *Client {
 	defer r.mu.RUnlock()
 	return r.organizer
 }
+
+// TryFinishQuestion atomically checks if the given question is still the active one,
+// clears it, and transitions the room to showing_results.
+// Returns false if the question was already finished (prevents double-finish).
+func (r *Room) TryFinishQuestion(questionID uuid.UUID) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.currentQuestion == nil || r.currentQuestion.ID != questionID {
+		return false
+	}
+	r.currentQuestion = nil
+	r.stopTimer = nil
+	r.state = StateShowingResults
+	return true
+}
