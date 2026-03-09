@@ -10,6 +10,7 @@ import (
 
 	appmw "presentarium/internal/middleware"
 	"presentarium/internal/service"
+	"presentarium/internal/ws"
 )
 
 // RouterDeps holds dependencies needed to build the router.
@@ -17,6 +18,7 @@ type RouterDeps struct {
 	AuthService         service.AuthService
 	PollService         service.PollService
 	QuestionService     service.QuestionService
+	WSHandler           *ws.Handler
 	JWTSecret           string
 	RefreshTokenTTLDays int
 }
@@ -30,6 +32,11 @@ func NewRouter(deps RouterDeps) http.Handler {
 	r.Use(chimw.Recoverer)
 
 	r.Get("/health", healthHandler)
+
+	// WebSocket endpoint (no JWT middleware — auth is handled inside the WS handler).
+	if deps.WSHandler != nil {
+		r.Get("/ws/room/{code}", deps.WSHandler.HandleRoom)
+	}
 
 	// Auth rate limiter: 5 req/min per IP
 	authLimiter := appmw.NewRateLimiter(5, time.Minute)

@@ -13,6 +13,7 @@ import (
 	"presentarium/internal/handler"
 	"presentarium/internal/repository"
 	"presentarium/internal/service"
+	"presentarium/internal/ws"
 )
 
 func main() {
@@ -46,10 +47,14 @@ func main() {
 	pollSvc := service.NewPollService(pollRepo)
 	questionSvc := service.NewQuestionService(questionRepo, pollRepo)
 
+	hub := ws.NewHub()
+	wsHandler := ws.NewHandler(hub, cfg.JWTSecret)
+
 	router := handler.NewRouter(handler.RouterDeps{
 		AuthService:         authSvc,
 		PollService:         pollSvc,
 		QuestionService:     questionSvc,
+		WSHandler:           wsHandler,
 		JWTSecret:           cfg.JWTSecret,
 		RefreshTokenTTLDays: cfg.JWTRefreshTokenTTL,
 	})
