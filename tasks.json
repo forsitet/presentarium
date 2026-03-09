@@ -204,7 +204,7 @@
         "Шаг 6: DELETE вопроса → 204; GET не находит"
       ],
       "dependencies": ["TASK-007"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-009",

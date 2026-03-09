@@ -144,6 +144,40 @@
 
 ---
 
+### 2026-02-17 10:00 — TASK-008: Backend CRUD вопросов (questions) всех 6 типов
+**Что сделано:**
+- internal/model/model.go: добавлен QuestionOption struct (Text, IsCorrect, ImageURL) и OptionList ([]QuestionOption) с реализацией driver.Valuer + sql.Scanner для JSONB хранения в PostgreSQL
+- internal/repository/question_repo.go: QuestionRepository interface + PostgresImpl (Create, GetByID, ListByPoll, Update, Delete, Reorder в транзакции, MaxPosition)
+- internal/service/question_service.go: QuestionService interface + questionService. Проверка владельца опроса через pollRepo. validateOptions: choice-типы требуют ≥2 вариантов и ≥1 правильного. Auto-position через MaxPosition+1 при создании.
+- internal/handler/question_handler.go: 5 обработчиков (list, create, update, delete, reorder). reorderRequest обёртывает массив ReorderRequest с validator dive.
+- internal/handler/routes.go: добавлен QuestionService в RouterDeps, зарегистрированы маршруты /{pollId}/questions/* вложенно в /polls
+- cmd/server/main.go: инициализация questionRepo + questionSvc, передача в RouterDeps
+
+**Маршруты:**
+- GET /api/polls/{pollId}/questions
+- POST /api/polls/{pollId}/questions
+- PUT /api/polls/{pollId}/questions/{id}
+- DELETE /api/polls/{pollId}/questions/{id}
+- PATCH /api/polls/{pollId}/questions/reorder
+
+**Изменённые файлы:**
+- backend/internal/model/model.go (обновлён)
+- backend/internal/repository/question_repo.go (новый)
+- backend/internal/service/question_service.go (новый)
+- backend/internal/handler/question_handler.go (новый)
+- backend/internal/handler/routes.go (обновлён)
+- backend/cmd/server/main.go (обновлён)
+- tasks.json (TASK-008 status → done)
+
+**Коммиты:** 73458c2, 5bc1367, 0f5a324
+**Статус:** done
+
+**Следующие доступные critical задачи:**
+- TASK-012 (WebSocket Hub, deps: TASK-003 ✓)
+- TASK-004 (Frontend React init, deps: TASK-001 ✓)
+
+---
+
 <!-- Агенты записывают сюда свои summary по формату:
 ### YYYY-MM-DD HH:MM — TASK-XXX: [название задачи]
 **Что сделано:** ...
