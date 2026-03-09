@@ -3,9 +3,9 @@
 ## Статус проекта
 
 **Всего задач:** 46
-**Выполнено:** 9
+**Выполнено:** 10
 **В работе:** 0
-**Ожидает:** 37
+**Ожидает:** 36
 
 ## Сессии работы агентов
 
@@ -340,6 +340,55 @@
 - TASK-004 (critical): Frontend React init (deps: TASK-001 ✓)
 - TASK-028 (medium): Backend: история сессий (deps: TASK-019 ✓)
 - TASK-011 (high): Backend: загрузка изображений (deps: TASK-005 ✓)
+
+---
+
+### 2025-11-15 13:00 — TASK-004: Frontend: Инициализация React-приложения с Vite, TypeScript и Tailwind CSS
+**Что сделано:**
+- frontend/package.json: Vite 6 + react-ts, все зависимости: react-router-dom@7, zustand@5, axios, recharts, react-wordcloud, qrcode.react, clsx, tailwind-merge, react-hook-form, zod
+- frontend/index.html: корневой HTML с lang="ru", id="root"
+- frontend/vite.config.ts: @vitejs/plugin-react
+- frontend/tsconfig.json + tsconfig.app.json + tsconfig.node.json: strict TypeScript с jsx: react-jsx, moduleResolution: bundler
+- frontend/tailwind.config.ts: content paths для src/**/*.{ts,tsx}
+- frontend/postcss.config.js: tailwindcss + autoprefixer
+- frontend/src/index.css: @tailwind base/components/utilities
+- frontend/src/main.tsx: StrictMode + RouterProvider
+- frontend/src/vite-env.d.ts: Vite env types
+- frontend/src/types/index.ts: интерфейсы User, Poll, Question, QuestionOption, Session, Participant, LeaderboardEntry
+- frontend/src/api/client.ts: axios инстанс с Authorization Bearer + автоматический refresh при 401 через interceptors
+- frontend/src/stores/authStore.ts: Zustand с persist middleware — user, accessToken, isAuthenticated, login/logout/setToken
+- frontend/src/routes/index.tsx: createBrowserRouter с lazy-loaded страницами, ProtectedRoute (redirect to /login)
+- frontend/src/ws/socket.ts: WSSocket класс с connect/on/off/send/disconnect, auto-reconnect с exponential backoff (5 попыток)
+- frontend/src/pages/LoginPage.tsx: заглушка (наполняется в TASK-006)
+- frontend/src/pages/RegisterPage.tsx: заглушка (TASK-006)
+- frontend/src/pages/DashboardPage.tsx: заглушка (TASK-009)
+- Созданы директории: src/api/, src/ws/, src/stores/, src/types/, src/pages/, src/components/, src/hooks/, src/utils/, src/routes/
+
+**ВАЖНО для следующей итерации:** npm install --legacy-peer-deps нужно запустить вручную в frontend/ (блокируется песочницей). После этого — npx tsc --noEmit и npm run build для верификации. react-wordcloud требует --legacy-peer-deps из-за React 19.
+
+**Изменённые файлы:**
+- frontend/package.json (новый)
+- frontend/index.html (новый)
+- frontend/vite.config.ts (новый)
+- frontend/tsconfig*.json (новые)
+- frontend/tailwind.config.ts (новый)
+- frontend/postcss.config.js (новый)
+- frontend/src/main.tsx (новый)
+- frontend/src/index.css (новый)
+- frontend/src/types/index.ts (новый)
+- frontend/src/api/client.ts (новый)
+- frontend/src/stores/authStore.ts (новый)
+- frontend/src/routes/index.tsx (новый)
+- frontend/src/ws/socket.ts (новый)
+- frontend/src/pages/*.tsx (новые заглушки)
+- tasks.json (TASK-004 status → done)
+
+**Статус:** done
+
+**Следующие доступные задачи:**
+- TASK-006 (critical): Frontend: страницы регистрации и логина (deps: TASK-004 ✓ + TASK-005 ✓)
+- TASK-011 (high): Backend: загрузка изображений (deps: TASK-005 ✓)
+- TASK-035 (high): Backend: middleware CORS/logging/rate-limit (deps: TASK-005 ✓)
 
 ---
 

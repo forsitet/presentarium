@@ -105,7 +105,7 @@
         "Шаг 5: npx tsc --noEmit → нет ошибок TypeScript"
       ],
       "dependencies": ["TASK-001"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-005",
