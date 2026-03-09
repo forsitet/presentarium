@@ -188,3 +188,14 @@ func (c *Client) SetParticipantID(id uuid.UUID) {
 func (c *Client) UserID() *uuid.UUID {
 	return c.userID
 }
+
+// TrySend attempts a non-blocking send of msg to the client's outgoing buffer.
+// Returns false if the buffer is full.
+func (c *Client) TrySend(msg []byte) bool {
+	select {
+	case c.send <- msg:
+		return true
+	default:
+		return false
+	}
+}
