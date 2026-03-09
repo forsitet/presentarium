@@ -3,9 +3,9 @@
 ## Статус проекта
 
 **Всего задач:** 46
-**Выполнено:** 8
+**Выполнено:** 9
 **В работе:** 0
-**Ожидает:** 38
+**Ожидает:** 37
 
 ## Сессии работы агентов
 
@@ -288,6 +288,31 @@
 
 **Следующие доступные critical задачи:**
 - TASK-018 (Backend: приём и валидация ответов, deps: TASK-017 ✓)
+
+---
+
+### 2026-03-09 21:00 — TASK-018: Backend: приём и валидация ответов участников
+**Что сделано:**
+- internal/ws/room.go: добавлены поле `answerCount int` и методы `ResetAnswerCount()`, `IncrementAnswerCount() int`, `AnswerCount() int` для in-memory подсчёта ответов на текущий вопрос.
+- internal/service/conduct_service.go:
+  - `HandleMessage` расширен: добавлены case для `submit_answer` и `submit_text`.
+  - `handleShowQuestion`: вызывает `room.ResetAnswerCount()` при старте нового вопроса.
+  - `handleSubmitAnswer`: валидирует роль участника, наличие активного вопроса, совпадение question_id, отсутствие дубликата (через `GetByParticipantAndQuestion`). Вычисляет `is_correct` через `computeIsCorrect`. Сохраняет ответ с серверным timestamp. Отправляет `answer_accepted` участнику, `answer_count` организатору.
+  - `handleSubmitText`: то же для текстовых ответов (open_text/word_cloud), `is_correct=nil`.
+  - `computeIsCorrect`: вычисляет правильность для single_choice (по индексу), image_choice (по индексу), multiple_choice (set equality). Для остальных типов — nil.
+
+**Логика валидации "вопрос активен":** `room.CurrentQuestion() == nil` → вопрос завершён (timer expired или ранняя остановка через TryFinishQuestion). Timestamp ответа — `time.Now()` на сервере, response_time_ms вычисляется от `current.StartedAt`.
+
+**Изменённые файлы:**
+- backend/internal/ws/room.go (добавлены answerCount + методы)
+- backend/internal/service/conduct_service.go (handleSubmitAnswer, handleSubmitText, computeIsCorrect)
+- tasks.json (TASK-018 status → done)
+
+**Статус:** done
+
+**Следующие доступные задачи:**
+- TASK-019 (high): Backend: система подсчёта баллов (deps: TASK-018 ✓)
+- TASK-004 (critical): Frontend: React init (deps: TASK-001 ✓)
 
 ---
 

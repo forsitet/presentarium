@@ -434,7 +434,7 @@
         "Шаг 5: отправить submit_answer с несуществующим question_id → ошибка"
       ],
       "dependencies": ["TASK-017"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-019",

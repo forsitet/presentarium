@@ -42,6 +42,7 @@ type Room struct {
 	organizer       *Client
 	currentQuestion *ActiveQuestion
 	stopTimer       chan struct{}
+	answerCount     int // number of answers received for the current question
 }
 
 // newRoom creates a new Room in the waiting state.
@@ -221,4 +222,26 @@ func (r *Room) TryFinishQuestion(questionID uuid.UUID) bool {
 	r.stopTimer = nil
 	r.state = StateShowingResults
 	return true
+}
+
+// ResetAnswerCount resets the in-memory answer counter for a new question.
+func (r *Room) ResetAnswerCount() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.answerCount = 0
+}
+
+// IncrementAnswerCount atomically increments and returns the new answer count.
+func (r *Room) IncrementAnswerCount() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.answerCount++
+	return r.answerCount
+}
+
+// AnswerCount returns the current answer count for the active question.
+func (r *Room) AnswerCount() int {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.answerCount
 }
