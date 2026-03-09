@@ -131,7 +131,7 @@
         "Шаг 8: 6 подряд POST /api/auth/login → 6-й запрос получает 429 Too Many Requests"
       ],
       "dependencies": ["TASK-003"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-006",

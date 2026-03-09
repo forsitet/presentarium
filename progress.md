@@ -95,6 +95,30 @@
 
 **Статус:** done
 
+### 2026-01-20 14:00 — TASK-005: Backend аутентификация (JWT + bcrypt)
+**Что сделано:**
+- internal/repository/user_repo.go: UserRepository interface + PostgresUserRepo (CreateUser, GetUserByEmail, GetUserByID, CreateRefreshToken, GetRefreshToken, DeleteRefreshToken, DeleteExpiredRefreshTokens). Конфликт email → errs.ErrConflict через pq.Error code 23505.
+- internal/service/auth_service.go: AuthService interface + authService (Register, Login, Refresh, Logout). bcrypt cost=12, JWT HS256, refresh token = opaque UUID хранится в БД, rotation при Refresh. Экспортированная ValidateAccessToken() для middleware.
+- internal/handler/auth_handler.go: authHandler с handleRegister, handleLogin, handleRefresh, handleLogout. JSON decode + go-playground/validator (email format, password min=8, name max=100). httpOnly cookie для refresh_token с SameSiteStrict.
+- internal/middleware/auth.go: Auth() middleware — JWT Bearer extraction + ValidateAccessToken → user_id в context. RateLimiter struct с per-IP sliding window (sync.Map + mutex), RateLimit() middleware → 429 с Retry-After: 60.
+- internal/handler/routes.go: обновлён — NewRouter принимает RouterDeps с AuthService и конфигом. /api/auth/* защищён RateLimit(5 req/min). /api/polls, /api/rooms, /api/upload — protected group с Auth middleware.
+- cmd/server/main.go: подключение к PostgreSQL через sqlx, инициализация UserRepository → AuthService → Router.
+
+**Изменённые файлы:**
+- backend/internal/repository/user_repo.go (новый)
+- backend/internal/service/auth_service.go (новый)
+- backend/internal/handler/auth_handler.go (новый)
+- backend/internal/middleware/auth.go (обновлён)
+- backend/internal/handler/routes.go (обновлён)
+- backend/cmd/server/main.go (обновлён)
+- tasks.json (TASK-005 status → done)
+
+**ВАЖНО для следующей итерации:** перед `go build` выполни `go mod tidy` в backend/ — go.sum пустой. Следующие доступные critical задачи: TASK-012 (WebSocket Hub, deps: TASK-003 ✓) или TASK-004 (Frontend React init, deps: TASK-001 ✓) или TASK-007 (CRUD polls, deps: TASK-005 ✓).
+
+**Статус:** done
+
+---
+
 <!-- Агенты записывают сюда свои summary по формату:
 ### YYYY-MM-DD HH:MM — TASK-XXX: [название задачи]
 **Что сделано:** ...
