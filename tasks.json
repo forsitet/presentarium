@@ -411,7 +411,7 @@
         "Шаг 5: после вопроса получить results и leaderboard в правильном формате"
       ],
       "dependencies": ["TASK-013"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-018",

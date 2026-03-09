@@ -20,6 +20,7 @@ type RouterDeps struct {
 	QuestionService     service.QuestionService
 	RoomService         service.RoomService
 	ParticipantService  service.ParticipantService
+	ConductService      service.ConductService
 	WSHandler           *ws.Handler
 	JWTSecret           string
 	RefreshTokenTTLDays int
@@ -51,10 +52,15 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// Auth rate limiter: 5 req/min per IP
 	authLimiter := appmw.NewRateLimiter(5, time.Minute)
 
+	// Wire conduct service as the WebSocket message handler.
+	if deps.WSHandler != nil && deps.ConductService != nil {
+		deps.WSHandler.SetMessageHandler(deps.ConductService.HandleMessage)
+	}
+
 	authH := newAuthHandler(deps.AuthService, deps.RefreshTokenTTLDays)
 	pollH := newPollHandler(deps.PollService)
 	questionH := newQuestionHandler(deps.QuestionService)
-	roomH := newRoomHandler(deps.RoomService)
+	roomH := newRoomHandler(deps.RoomService, deps.ConductService)
 	participantH := newParticipantHandler(deps.ParticipantService)
 
 	r.Route("/api", func(r chi.Router) {

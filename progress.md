@@ -261,6 +261,36 @@
 
 ---
 
+### 2026-03-09 14:00 — TASK-017: Backend: проведение опроса — показ вопроса и серверный таймер
+**Что сделано:**
+- internal/ws/room.go: добавлен метод `TryFinishQuestion(questionID)` — атомарно проверяет, что данный вопрос ещё активен, очищает currentQuestion и переводит room.state в `showing_results`. Предотвращает двойную отправку question_end.
+- internal/repository/answer_repo.go: AnswerRepository interface + PostgresImpl (Create, GetByParticipantAndQuestion, ListByQuestion, GetLeaderboard, UpdateParticipantScore). LeaderboardRow struct. Используется ConductService для вычисления результатов.
+- internal/service/conduct_service.go: ConductService interface + conductService. `HandleMessage` диспетчеризует WS-сообщения `show_question` и `end_question`. `handleShowQuestion`: валидация вопроса принадлежности к сессии, broadcast `question_start` с options без `is_correct`, запуск таймер-горутины. `startTimer`: тикает каждую секунду, broadcast `timer_tick`, при достижении 0 вызывает `finishQuestion`. `finishQuestion`: TryFinishQuestion атомарно, broadcast `question_end` с revealed options, пустые `results`+`leaderboard` (заполнятся в TASK-018/019). `EndQuestion`: HTTP-вызов для досрочного завершения (проверяет владельца сессии). `buildParticipantOptions`: маскирует `is_correct` от участников при вопросе.
+- internal/handler/room_handler.go: newRoomHandler принимает ConductService; handleChangeState обрабатывает action=`end_question` через conductSvc.EndQuestion.
+- internal/handler/routes.go: ConductService добавлен в RouterDeps; wsHandler.SetMessageHandler(conductSvc.HandleMessage) устанавливает обработчик WS-сообщений.
+- cmd/server/main.go: инициализация answerRepo + conductSvc, передача в RouterDeps.
+
+**Маршруты/сообщения:**
+- WS: `show_question` (organizer → server) → broadcast `question_start` + `timer_tick` × N + `question_end` + `results` + `leaderboard`
+- WS: `end_question` (organizer → server) → досрочное завершение
+- PATCH /api/rooms/{code}/state {action:"end_question"} → HTTP досрочное завершение
+
+**Изменённые файлы:**
+- backend/internal/ws/room.go (добавлен TryFinishQuestion)
+- backend/internal/repository/answer_repo.go (новый)
+- backend/internal/service/conduct_service.go (новый)
+- backend/internal/handler/room_handler.go (обновлён)
+- backend/internal/handler/routes.go (обновлён)
+- backend/cmd/server/main.go (обновлён)
+- tasks.json (TASK-017 status → done)
+
+**Статус:** done
+
+**Следующие доступные critical задачи:**
+- TASK-018 (Backend: приём и валидация ответов, deps: TASK-017 ✓)
+
+---
+
 <!-- Агенты записывают сюда свои summary по формату:
 ### YYYY-MM-DD HH:MM — TASK-XXX: [название задачи]
 **Что сделано:** ...

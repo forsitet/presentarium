@@ -14,11 +14,12 @@ import (
 )
 
 type roomHandler struct {
-	roomSvc service.RoomService
+	roomSvc    service.RoomService
+	conductSvc service.ConductService
 }
 
-func newRoomHandler(roomSvc service.RoomService) *roomHandler {
-	return &roomHandler{roomSvc: roomSvc}
+func newRoomHandler(roomSvc service.RoomService, conductSvc service.ConductService) *roomHandler {
+	return &roomHandler{roomSvc: roomSvc, conductSvc: conductSvc}
 }
 
 // handleCreate handles POST /api/rooms
@@ -74,6 +75,7 @@ func (h *roomHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleChangeState handles PATCH /api/rooms/:code/state
+// Supports actions: start, end, end_question.
 func (h *roomHandler) handleChangeState(w http.ResponseWriter, r *http.Request) {
 	userID := r.Context().Value(appmw.UserIDKey).(uuid.UUID)
 	code := chi.URLParam(r, "code")
@@ -83,6 +85,33 @@ func (h *roomHandler) handleChangeState(w http.ResponseWriter, r *http.Request) 
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	// end_question is handled by the conduct service (TASK-017).
+	if req.Action == "end_question" {
+		if h.conductSvc == nil {
+			writeError(w, http.StatusServiceUnavailable, "conduct service not available")
+			return
+		}
+		err := h.conductSvc.EndQuestion(r.Context(), userID, code)
+		if err != nil {
+			if errors.Is(err, errs.ErrNotFound) {
+				writeError(w, http.StatusNotFound, "room or active question not found")
+				return
+			}
+			if errors.Is(err, errs.ErrForbidden) {
+				writeError(w, http.StatusForbidden, "forbidden")
+				return
+			}
+			if errors.Is(err, errs.ErrValidation) {
+				writeError(w, http.StatusBadRequest, "no active question to end")
+				return
+			}
+			writeError(w, http.StatusInternalServerError, "failed to end question")
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 		return
 	}
 
