@@ -58,7 +58,7 @@
         "Шаг 4: curl http://localhost:8080/health → {\"status\":\"ok\"}"
       ],
       "dependencies": ["TASK-001"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-003",
