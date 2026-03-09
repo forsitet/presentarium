@@ -16,6 +16,7 @@ import (
 type RouterDeps struct {
 	AuthService         service.AuthService
 	PollService         service.PollService
+	QuestionService     service.QuestionService
 	JWTSecret           string
 	RefreshTokenTTLDays int
 }
@@ -35,6 +36,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 
 	authH := newAuthHandler(deps.AuthService, deps.RefreshTokenTTLDays)
 	pollH := newPollHandler(deps.PollService)
+	questionH := newQuestionHandler(deps.QuestionService)
 
 	r.Route("/api", func(r chi.Router) {
 		r.Route("/auth", func(r chi.Router) {
@@ -57,6 +59,15 @@ func NewRouter(deps RouterDeps) http.Handler {
 				r.Put("/{id}", pollH.handleUpdate)
 				r.Delete("/{id}", pollH.handleDelete)
 				r.Post("/{id}/copy", pollH.handleCopy)
+
+				// Question routes nested under polls
+				r.Route("/{pollId}/questions", func(r chi.Router) {
+					r.Get("/", questionH.handleList)
+					r.Post("/", questionH.handleCreate)
+					r.Patch("/reorder", questionH.handleReorder)
+					r.Put("/{id}", questionH.handleUpdate)
+					r.Delete("/{id}", questionH.handleDelete)
+				})
 			})
 
 			// Upload routes (added in subsequent tasks)

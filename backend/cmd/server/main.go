@@ -35,6 +35,7 @@ func main() {
 
 	userRepo := repository.NewPostgresUserRepo(db)
 	pollRepo := repository.NewPostgresPollRepo(db)
+	questionRepo := repository.NewPostgresQuestionRepo(db)
 
 	authSvc := service.NewAuthService(
 		userRepo,
@@ -43,10 +44,12 @@ func main() {
 		cfg.JWTRefreshTokenTTL,
 	)
 	pollSvc := service.NewPollService(pollRepo)
+	questionSvc := service.NewQuestionService(questionRepo, pollRepo)
 
 	router := handler.NewRouter(handler.RouterDeps{
 		AuthService:         authSvc,
 		PollService:         pollSvc,
+		QuestionService:     questionSvc,
 		JWTSecret:           cfg.JWTSecret,
 		RefreshTokenTTLDays: cfg.JWTRefreshTokenTTL,
 	})
