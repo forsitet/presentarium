@@ -88,14 +88,14 @@ func (h *roomHandler) handleChangeState(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// end_question is handled by the conduct service (TASK-017).
-	if req.Action == "end_question" {
+	switch req.Action {
+	case "end_question":
+		// Handled by conduct service (TASK-017).
 		if h.conductSvc == nil {
 			writeError(w, http.StatusServiceUnavailable, "conduct service not available")
 			return
 		}
-		err := h.conductSvc.EndQuestion(r.Context(), userID, code)
-		if err != nil {
+		if err := h.conductSvc.EndQuestion(r.Context(), userID, code); err != nil {
 			if errors.Is(err, errs.ErrNotFound) {
 				writeError(w, http.StatusNotFound, "room or active question not found")
 				return
@@ -113,6 +113,26 @@ func (h *roomHandler) handleChangeState(w http.ResponseWriter, r *http.Request) 
 		}
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 		return
+
+	case "end":
+		// Session end: conduct service broadcasts session_end and updates DB status.
+		if h.conductSvc != nil {
+			if err := h.conductSvc.EndSession(r.Context(), userID, code); err != nil {
+				if errors.Is(err, errs.ErrNotFound) {
+					writeError(w, http.StatusNotFound, "room not found")
+					return
+				}
+				if errors.Is(err, errs.ErrForbidden) {
+					writeError(w, http.StatusForbidden, "forbidden")
+					return
+				}
+				writeError(w, http.StatusInternalServerError, "failed to end session")
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+			return
+		}
+		// Fall through to room service if conduct service is unavailable.
 	}
 
 	if err := h.roomSvc.ChangeState(r.Context(), userID, code, req.Action); err != nil {

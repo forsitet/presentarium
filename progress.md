@@ -316,6 +316,33 @@
 
 ---
 
+### 2026-03-09 23:00 — TASK-019: Backend: система подсчёта баллов (scoring) и лидерборд
+**Что сделано:**
+- pkg/scoring/scoring.go: функция `CalculateScore(basePoints, timeLimitSec, responseTimeMs int, scoringRule string, isCorrect *bool) int`. Три режима: `none` (всегда 0), `correct_answer` (basePoints или 0), `speed_bonus` (пропорционально оставшемуся времени, минимум 10% от basePoints).
+- internal/ws/room.go: добавлены поля `ScoringRule string` и `Points int` в `ActiveQuestion`. Добавлен метод `ForEachParticipant(func(*Client))` для итерации участников без блокировки.
+- internal/ws/messages.go: `AnswerAcceptedData` дополнен полем `IsCorrect *bool`. Добавлен `SessionEndData` с `Rankings`, `MyRank`, `MyScore`.
+- internal/service/conduct_service.go: `handleShowQuestion` теперь загружает poll для получения `ScoringRule` и сохраняет его в `ActiveQuestion`. `handleSubmitAnswer` вычисляет реальный score через `scoring.CalculateScore`, обновляет `participants.total_score` через `answerRepo.UpdateParticipantScore`, отправляет score и is_correct в `answer_accepted`. `finishQuestion` отправляет персональный лидерборд (MyRank, MyScore) каждому участнику и общий — организатору (топ-5). Добавлен метод `EndSession` — завершает сессию, обновляет DB, broadcast `session_end` с финальным лидербордом (топ-10 + персональные данные участника).
+- internal/repository/answer_repo.go: `GetLeaderboard` переписан с JOIN на `answers` для корректного тайбрейкинга по суммарному `response_time_ms` (быстрее ответивший — выше при равных очках).
+- internal/handler/room_handler.go: action="end" теперь маршрутизируется через `conductSvc.EndSession` (с broadcast session_end), а не только через roomSvc.ChangeState.
+
+**Изменённые файлы:**
+- backend/pkg/scoring/scoring.go (новый)
+- backend/internal/ws/room.go (ActiveQuestion расширен, ForEachParticipant)
+- backend/internal/ws/messages.go (AnswerAcceptedData + SessionEndData)
+- backend/internal/service/conduct_service.go (scoring, EndSession, personalized leaderboard)
+- backend/internal/repository/answer_repo.go (тайбрейкинг по response_time_ms)
+- backend/internal/handler/room_handler.go (action="end" → EndSession)
+- tasks.json (TASK-019 status → done)
+
+**Статус:** done
+
+**Следующие доступные задачи:**
+- TASK-004 (critical): Frontend React init (deps: TASK-001 ✓)
+- TASK-028 (medium): Backend: история сессий (deps: TASK-019 ✓)
+- TASK-011 (high): Backend: загрузка изображений (deps: TASK-005 ✓)
+
+---
+
 <!-- Агенты записывают сюда свои summary по формату:
 ### YYYY-MM-DD HH:MM — TASK-XXX: [название задачи]
 **Что сделано:** ...

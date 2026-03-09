@@ -458,7 +458,7 @@
         "Шаг 6: unit-тест для scoring.CalculateScore() покрывает все три режима"
       ],
       "dependencies": ["TASK-018"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-020",
