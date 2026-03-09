@@ -37,7 +37,7 @@
         "Шаг 4: docker compose down → все контейнеры остановлены без ошибок"
       ],
       "dependencies": [],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-002",
