@@ -1,0 +1,1070 @@
+{
+  "agent_instructions": {
+    "before_start": [
+      "Прочитай этот файл целиком и выполни: git log --oneline -20",
+      "Выбери ОДНУ задачу со статусом 'pending' и наивысшим приоритетом (critical > high > medium > low)",
+      "Проверь, что все задачи из поля 'dependencies' имеют статус 'done'",
+      "Объяви выбранную задачу в progress.md: дата + id + description"
+    ],
+    "during_work": [
+      "Работай ТОЛЬКО над выбранной задачей — не рефакторь соседний код",
+      "Делай git commit после каждого логического шага (backend миграция, endpoint, frontend компонент)",
+      "Если встречаешь неожиданный блокер — зафиксируй его в progress.md и останови работу"
+    ],
+    "before_finish": [
+      "Выполни ВСЕ test_steps из задачи — ни одного пропуска",
+      "Меняй status на 'done' ТОЛЬКО если все тест-шаги прошли успешно",
+      "Запиши краткое summary в progress.md: что сделано, какие файлы изменены, ссылка на коммит",
+      "ЗАПРЕЩЕНО удалять, переименовывать или реструктурировать задачи — только менять поле 'status'"
+    ]
+  },
+  "tasks": [
+    {
+      "id": "TASK-001",
+      "category": "infrastructure",
+      "priority": "critical",
+      "description": "Инициализация структуры репозитория и Docker Compose для разработки",
+      "acceptance_criteria": [
+        "Созданы директории: backend/, frontend/, nginx/, .github/workflows/",
+        "docker-compose.yml запускает PostgreSQL 16, Go-сервис-заглушку и Nginx",
+        "PostgreSQL доступен на порту 5432, Go-сервис отвечает на GET /health",
+        "Файл .env.example содержит все переменные окружения с описанием"
+      ],
+      "test_steps": [
+        "Шаг 1: выполни docker compose up -d",
+        "Шаг 2: curl http://localhost:8080/health → ожидаемый ответ: {\"status\":\"ok\"}",
+        "Шаг 3: docker compose ps → все 3 сервиса в статусе Up",
+        "Шаг 4: docker compose down → все контейнеры остановлены без ошибок"
+      ],
+      "dependencies": [],
+      "status": "pending"
+    },
+    {
+      "id": "TASK-002",
+      "category": "infrastructure",
+      "priority": "critical",
+      "description": "Инициализация Go-модуля с clean architecture и базовой конфигурацией",
+      "acceptance_criteria": [
+        "backend/go.mod содержит все зависимости: chi, gorilla/websocket, sqlx, lib/pq, golang-migrate, golang-jwt/jwt/v5, golang.org/x/crypto, go-playground/validator, google/uuid, caarlos0/env",
+        "Структура internal/ создана: config/, model/, repository/, service/, handler/, middleware/, ws/, pkg/, errs/",
+        "internal/config/config.go загружает конфигурацию из переменных окружения",
+        "internal/errs/errors.go содержит типы ErrNotFound, ErrForbidden, ErrConflict, ErrValidation",
+        "cmd/server/main.go запускает HTTP-сервер с маршрутом GET /health"
+      ],
+      "test_steps": [
+        "Шаг 1: cd backend && go build ./... → сборка без ошибок",
+        "Шаг 2: go vet ./... → нет предупреждений",
+        "Шаг 3: DB_HOST=localhost go run cmd/server/main.go → сервер стартует на :8080",
+        "Шаг 4: curl http://localhost:8080/health → {\"status\":\"ok\"}"
+      ],
+      "dependencies": ["TASK-001"],
+      "status": "pending"
+    },
+    {
+      "id": "TASK-003",
+      "category": "infrastructure",
+      "priority": "critical",
+      "description": "Инициализация PostgreSQL-миграций и схемы базы данных",
+      "acceptance_criteria": [
+        "Установлен и настроен golang-migrate/migrate",
+        "Миграция 000001: таблица users (id UUID PK, email UNIQUE, password_hash, name, created_at, updated_at)",
+        "Миграция 000002: таблицы polls и questions с JSONB-полем options, каскадным удалением",
+        "Миграция 000003: таблицы sessions, participants",
+        "Миграция 000004: таблицы answers с UNIQUE(participant_id, question_id), brainstorm_ideas, brainstorm_votes",
+        "Все индексы из PRD раздела 5.2 созданы",
+        "Команды migrate up и migrate down работают без ошибок"
+      ],
+      "test_steps": [
+        "Шаг 1: migrate -path migrations -database postgres://... up → Applied N migrations",
+        "Шаг 2: psql → \\dt → все таблицы присутствуют",
+        "Шаг 3: psql → \\d answers → видны ограничения UNIQUE и FK",
+        "Шаг 4: migrate -path migrations -database postgres://... down → откат без ошибок",
+        "Шаг 5: migrate up снова → чистая применяемость"
+      ],
+      "dependencies": ["TASK-002"],
+      "status": "pending"
+    },
+    {
+      "id": "TASK-004",
+      "category": "infrastructure",
+      "priority": "critical",
+      "description": "Инициализация React-приложения с Vite, TypeScript и Tailwind CSS",
+      "acceptance_criteria": [
+        "frontend/ создан через Vite с шаблоном react-ts",
+        "Tailwind CSS настроен (tailwind.config.ts, postcss.config.js, подключён в index.css)",
+        "Все зависимости установлены: react-router-dom, zustand, axios, recharts, react-wordcloud, qrcode.react, clsx, tailwind-merge, react-hook-form, zod",
+        "Структура src/ создана: api/, ws/, stores/, types/, pages/, components/, hooks/, utils/, routes/",
+        "src/routes/index.tsx настроен с createBrowserRouter, ProtectedRoute реализован",
+        "TypeScript не выдаёт ошибок при сборке"
+      ],
+      "test_steps": [
+        "Шаг 1: cd frontend && npm install → установка без ошибок",
+        "Шаг 2: npm run dev → сервер запущен на localhost:5173",
+        "Шаг 3: открыть http://localhost:5173 → страница отображается без ошибок в консоли",
+        "Шаг 4: npm run build → сборка успешна, dist/ создан",
+        "Шаг 5: npx tsc --noEmit → нет ошибок TypeScript"
+      ],
+      "dependencies": ["TASK-001"],
+      "status": "pending"
+    },
+    {
+      "id": "TASK-005",
+      "category": "security",
+      "priority": "critical",
+      "description": "Backend: аутентификация — регистрация и логин (JWT + bcrypt)",
+      "acceptance_criteria": [
+        "POST /api/auth/register: принимает email, password, name; хранит bcrypt hash (cost≥10); возвращает access token (15 мин) + refresh token в httpOnly cookie (7 дней)",
+        "POST /api/auth/login: проверяет email/password, выдаёт токены",
+        "POST /api/auth/refresh: обновляет access token по валидному refresh token из cookie",
+        "POST /api/auth/logout: инвалидирует refresh token (удаляет из БД)",
+        "Rate limiting: не более 5 запросов в минуту на IP для auth-эндпоинтов",
+        "Валидация: email формат, password минимум 8 символов, name макс. 100"
+      ],
+      "test_steps": [
+        "Шаг 1: POST /api/auth/register {email: test@test.com, password: password123, name: Test} → 201, тело содержит access_token",
+        "Шаг 2: POST /api/auth/register с тем же email → 409 Conflict",
+        "Шаг 3: POST /api/auth/register {password: short} → 400 с ошибкой валидации",
+        "Шаг 4: POST /api/auth/login {email: test@test.com, password: password123} → 200, access_token в теле, refresh_token в cookie",
+        "Шаг 5: POST /api/auth/login {password: wrong} → 401",
+        "Шаг 6: POST /api/auth/refresh с валидным cookie → 200, новый access_token",
+        "Шаг 7: POST /api/auth/logout → 200, cookie удалён",
+        "Шаг 8: 6 подряд POST /api/auth/login → 6-й запрос получает 429 Too Many Requests"
+      ],
+      "dependencies": ["TASK-003"],
+      "status": "pending"
+    },
+    {
+      "id": "TASK-006",
+      "category": "ui",
+      "priority": "critical",
+      "description": "Frontend: страницы регистрации и логина с валидацией",
+      "acceptance_criteria": [
+        "AuthLayout.tsx: центрированный layout для auth-страниц",
+        "LoginPage.tsx: форма (email, password), валидация zod, вызов POST /api/auth/login, сохранение токена в authStore, редирект на /dashboard",
+        "RegisterPage.tsx: форма (name, email, password), валидация, вызов POST /api/auth/register",
+        "src/api/client.ts: axios-инстанс с базовым URL, интерцептором для добавления Authorization: Bearer <token> и автоматическим refresh при 401",
+        "authStore.ts: хранит user, accessToken, isAuthenticated; методы login, logout, refresh",
+        "ProtectedRoute.tsx: редирект на /login если не аутентифицирован"
+      ],
+      "test_steps": [
+        "Шаг 1: открыть http://localhost:5173/register, заполнить форму, нажать «Зарегистрироваться» → переход на /dashboard",
+        "Шаг 2: открыть /login, войти → переход на /dashboard",
+        "Шаг 3: попытка открыть /dashboard без авторизации → редирект на /login",
+        "Шаг 4: отправить форму с коротким паролем → отображается сообщение об ошибке под полем",
+        "Шаг 5: зайти, обновить страницу → пользователь остаётся авторизованным (токен восстанавливается из localStorage)",
+        "Шаг 6: нажать кнопку «Выйти» → переход на /login, токен очищен"
+      ],
+      "dependencies": ["TASK-004", "TASK-005"],
+      "status": "pending"
+    },
+    {
+      "id": "TASK-007",
+      "category": "functional",
+      "priority": "critical",
+      "description": "Backend: CRUD опросов (polls) с авторизацией",
+      "acceptance_criteria": [
+        "GET /api/polls — список опросов текущего пользователя (только свои)",
+        "POST /api/polls — создание опроса (title, description, scoring_rule, question_order)",
+        "GET /api/polls/:id — детали опроса (только для владельца)",
+        "PUT /api/polls/:id — обновление",
+        "DELETE /api/polls/:id — удаление (каскадное удаление вопросов)",
+        "POST /api/polls/:id/copy — копирование опроса с пометкой '(Копия)' в названии",
+        "Все эндпоинты требуют JWT, организатор видит только свои опросы"
+      ],
+      "test_steps": [
+        "Шаг 1: POST /api/polls {title: 'Тест', scoring_rule: 'correct_answer'} → 201, возвращает id",
+        "Шаг 2: GET /api/polls → список содержит созданный опрос",
+        "Шаг 3: PUT /api/polls/:id {title: 'Новое название'} → 200, title обновлён",
+        "Шаг 4: POST /api/polls/:id/copy → 201, новый опрос с названием 'Новое название (Копия)'",
+        "Шаг 5: GET /api/polls/:id с токеном другого пользователя → 403 Forbidden",
+        "Шаг 6: DELETE /api/polls/:id → 204; GET /api/polls/:id → 404"
+      ],
+      "dependencies": ["TASK-005"],
+      "status": "pending"
+    },
+    {
+      "id": "TASK-008",
+      "category": "functional",
+      "priority": "critical",
+      "description": "Backend: CRUD вопросов (questions) всех 6 типов",
+      "acceptance_criteria": [
+        "GET /api/polls/:pollId/questions — список вопросов с сортировкой по position",
+        "POST /api/polls/:pollId/questions — создание вопроса любого типа (single_choice, multiple_choice, open_text, image_choice, word_cloud, brainstorm)",
+        "PUT /api/polls/:pollId/questions/:id — обновление вопроса",
+        "DELETE /api/polls/:pollId/questions/:id — удаление",
+        "PATCH /api/polls/:pollId/questions/reorder — обновление порядка (массив id→position)",
+        "Валидация: choice-типы требуют ≥2 вариантов и ≥1 правильного; time_limit 5-300; text макс. 500"
+      ],
+      "test_steps": [
+        "Шаг 1: POST вопрос типа single_choice с options [{text:'A', is_correct:true}, {text:'B', is_correct:false}] → 201",
+        "Шаг 2: POST вопрос типа single_choice с 1 вариантом → 400 с описанием ошибки",
+        "Шаг 3: POST вопрос типа open_text (без options) → 201",
+        "Шаг 4: POST вопрос с time_limit_seconds: 400 → 400 validation error",
+        "Шаг 5: PATCH /reorder с новым порядком → 200; GET вопросы возвращает в новом порядке",
+        "Шаг 6: DELETE вопроса → 204; GET не находит"
+      ],
+      "dependencies": ["TASK-007"],
+      "status": "pending"
+    },
+    {
+      "id": "TASK-009",
+      "category": "ui",
+      "priority": "high",
+      "description": "Frontend: дашборд со списком опросов",
+      "acceptance_criteria": [
+        "DashboardPage.tsx: отображает список опросов текущего пользователя в виде карточек",
+        "PollCard.tsx: показывает title, description, дату создания, кнопки «Редактировать», «Запустить», «Удалить», «Копировать»",
+        "Кнопка «Создать опрос» — переход на /polls/new",
+        "Подтверждение перед удалением (модальный диалог)",
+        "Пустое состояние если опросов нет",
+        "Загрузочный скелетон во время запроса"
+      ],
+      "test_steps": [
+        "Шаг 1: войти и открыть /dashboard → список опросов или сообщение 'Нет опросов'",
+        "Шаг 2: нажать «Создать опрос» → переход на /polls/new",
+        "Шаг 3: нажать «Удалить» → появляется диалог подтверждения",
+        "Шаг 4: подтвердить удаление → карточка исчезает из списка без перезагрузки страницы",
+        "Шаг 5: нажать «Копировать» → в списке появляется новая карточка с '(Копия)'"
+      ],
+      "dependencies": ["TASK-006", "TASK-007"],
+      "status": "pending"
+    },
+    {
+      "id": "TASK-010",
+      "category": "ui",
+      "priority": "high",
+      "description": "Frontend: редактор опроса — настройки и CRUD вопросов",
+      "acceptance_criteria": [
+        "PollEditorPage.tsx: форма с полями title, description, scoring_rule, question_order",
+        "Список вопросов с drag-and-drop для изменения порядка",
+        "QuestionTypeSelector.tsx: выбор типа вопроса из 6 вариантов с иконками и описанием",
+        "QuestionEditorPanel.tsx: форма редактирования вопроса с полями, специфичными для каждого типа",
+        "Для choice-типов: добавление/удаление вариантов, отметка правильного ответа",
+        "Сохранение происходит при изменениях (auto-save или кнопка «Сохранить»)",
+        "Предпросмотр вопроса QuestionPreview.tsx"
+      ],
+      "test_steps": [
+        "Шаг 1: /polls/new → заполнить форму, сохранить → переход на /polls/:id/edit",
+        "Шаг 2: добавить вопрос типа single_choice → появляется панель с вариантами ответов",
+        "Шаг 3: добавить 3 варианта, отметить 1 правильным → сохранить → GET /api/polls/:id/questions → вопрос сохранён корректно",
+        "Шаг 4: перетащить вопрос в другую позицию → порядок обновился и сохранился",
+        "Шаг 5: добавить вопрос типа word_cloud → нет поля для вариантов ответа"
+      ],
+      "dependencies": ["TASK-008", "TASK-009"],
+      "status": "pending"
+    },
+    {
+      "id": "TASK-011",
+      "category": "functional",
+      "priority": "high",
+      "description": "Backend: загрузка изображений для вопросов типа image_choice",
+      "acceptance_criteria": [
+        "POST /api/upload/image: принимает multipart/form-data с файлом изображения",
+        "Проверка MIME-type на сервере (не доверяем Content-Type): разрешены image/jpeg, image/png, image/webp",
+        "Ограничение размера: 5 МБ",
+        "Файл сохраняется в ./uploads/images/{uuid}.{ext}",
+        "Возвращает JSON с image_url для последующей вставки в вопрос",
+        "Файлы хранятся вне корневой директории веб-сервера, доступны через /uploads/ endpoint"
+      ],
+      "test_steps": [
+        "Шаг 1: POST /api/upload/image с валидным JPEG (< 5 МБ) → 200, {image_url: '/uploads/images/uuid.jpg'}",
+        "Шаг 2: GET на полученный image_url → изображение скачивается",
+        "Шаг 3: загрузить файл > 5 МБ → 413 Request Entity Too Large",
+        "Шаг 4: загрузить .exe файл с Content-Type: image/jpeg → 415 Unsupported Media Type",
+        "Шаг 5: загрузить без авторизации → 401"
+      ],
+      "dependencies": ["TASK-005"],
+      "status": "pending"
+    },
+    {
+      "id": "TASK-012",
+      "category": "functional",
+      "priority": "critical",
+      "description": "Backend: WebSocket Hub — управление комнатами и соединениями",
+      "acceptance_criteria": [
+        "ws/hub.go: Hub хранит map[roomCode]*Room, методы Register/Unregister клиентов, Broadcast в комнату",
+        "ws/client.go: Client с readPump и writePump горутинами, ping/pong каждые 30 сек, буферизированный канал записи",
+        "ws/room.go: Room хранит список клиентов, текущее состояние (waiting/active/showing_question/showing_results/finished), текущий вопрос",
+        "ws/messages.go: типизированные структуры для всех входящих и исходящих WS-сообщений из PRD раздела 3.6",
+        "ws/handler.go: HTTP upgrade endpoint GET /ws/room/:code?name=:name, аутентификация по session_token (участник) или JWT (организатор)",
+        "Rate limiting: не более 10 сообщений/сек от одного клиента",
+        "Максимальный размер сообщения: 4 КБ"
+      ],
+      "test_steps": [
+        "Шаг 1: подключиться WebSocket-клиентом к ws://localhost:8080/ws/room/123456?name=test → успешное соединение (101 Switching Protocols)",
+        "Шаг 2: отправить невалидный JSON → соединение не рвётся, ошибка логируется",
+        "Шаг 3: открыть 10 WebSocket-соединений к одной комнате → все Connected",
+        "Шаг 4: закрыть соединение → через 30 сек ping/pong обнаруживает разрыв и очищает клиента",
+        "Шаг 5: отправить сообщение > 4 КБ → соединение закрывается с кодом 1009"
+      ],
+      "dependencies": ["TASK-003"],
+      "status": "pending"
+    },
+    {
+      "id": "TASK-013",
+      "category": "functional",
+      "priority": "critical",
+      "description": "Backend: создание и управление сессиями (комнатами)",
+      "acceptance_criteria": [
+        "POST /api/rooms: создаёт сессию для опроса, генерирует уникальный 6-значный код, инициализирует Room в Hub",
+        "PATCH /api/rooms/:code/state: смена состояния комнаты (start, next_question, end)",
+        "GET /api/rooms/:code: получение информации о комнате (статус, количество участников)",
+        "Код комнаты уникален среди активных комнат (статус != finished)",
+        "У организатора может быть только одна активная комната на опрос"
+      ],
+      "test_steps": [
+        "Шаг 1: POST /api/rooms {poll_id: uuid} → 201, {room_code: '123456', join_url: '/join/123456'}",
+        "Шаг 2: POST /api/rooms с тем же poll_id → 409 Conflict (уже активная комната)",
+        "Шаг 3: GET /api/rooms/123456 → статус 'waiting', participants: 0",
+        "Шаг 4: PATCH /api/rooms/123456/state {action: 'start'} → 200, статус меняется на 'active'",
+        "Шаг 5: PATCH /api/rooms/123456/state {action: 'end'} → 200, статус 'finished', код освобождается",
+        "Шаг 6: после завершения POST /api/rooms с тем же poll_id → 201 (новая комната создаётся)"
+      ],
+      "dependencies": ["TASK-012", "TASK-007"],
+      "status": "pending"
+    },
+    {
+      "id": "TASK-014",
+      "category": "functional",
+      "priority": "critical",
+      "description": "Backend: подключение участников через WebSocket с переподключением",
+      "acceptance_criteria": [
+        "При первом подключении: создаётся запись participant в БД (session_token UUID, name, session_id), возвращается session_token клиенту",
+        "При переподключении: если передан session_token в query-параметре — восстанавливается существующий участник без создания нового",
+        "Организатор получает WS-сообщение participant_joined/{participant_left} при изменении состава",
+        "GET /api/rooms/:code/participants — список участников для экрана ожидания",
+        "Дублирование имён допускается (различение по session_id)"
+      ],
+      "test_steps": [
+        "Шаг 1: подключиться к комнате → получить сообщение {type:'connected', data:{session_token:'uuid'}}",
+        "Шаг 2: организатор одновременно должен получить сообщение participant_joined",
+        "Шаг 3: GET /api/rooms/:code/participants → список содержит нового участника",
+        "Шаг 4: закрыть соединение, переподключиться с session_token → тот же participant в БД (id не изменился)",
+        "Шаг 5: два участника с одинаковым именем → оба присутствуют в списке (разные id)"
+      ],
+      "dependencies": ["TASK-013"],
+      "status": "pending"
+    },
+    {
+      "id": "TASK-015",
+      "category": "ui",
+      "priority": "high",
+      "description": "Frontend: экран ожидания организатора (код, QR, список участников)",
+      "acceptance_criteria": [
+        "HostSessionPage.tsx в состоянии 'waiting': отображает 6-значный код крупным шрифтом, ссылку для копирования, QR-код (qrcode.react)",
+        "ParticipantList.tsx: real-time список участников, обновляется через WebSocket без перезагрузки",
+        "Кнопка «Начать опрос» — доступна если есть хотя бы 1 участник",
+        "ws/socket.ts: функция connect(roomCode, token), обработка входящих сообщений, авто-реконнект",
+        "sessionStore.ts: хранит текущую сессию, список участников, состояние комнаты"
+      ],
+      "test_steps": [
+        "Шаг 1: создать комнату → открыть /host/:code → виден QR-код и код комнаты",
+        "Шаг 2: открыть /join/:code в другой вкладке, ввести имя → в списке участников организатора появляется имя",
+        "Шаг 3: закрыть вкладку участника → участник помечается как отключённый (или удаляется)",
+        "Шаг 4: кнопка «Начать» недоступна при 0 участниках, активна при 1+",
+        "Шаг 5: скопировать ссылку → ссылка вида https://localhost/join/:code"
+      ],
+      "dependencies": ["TASK-006", "TASK-014"],
+      "status": "pending"
+    },
+    {
+      "id": "TASK-016",
+      "category": "ui",
+      "priority": "high",
+      "description": "Frontend: страница подключения участника (join) с переподключением",
+      "acceptance_criteria": [
+        "JoinPage.tsx: поле ввода кода комнаты (или подставляется из URL /join/:code), поле имени (2-30 символов), кнопка «Войти»",
+        "После подключения: WebSocket соединение установлено, session_token сохранён в localStorage",
+        "ParticipantSessionPage.tsx в состоянии 'waiting': экран «Ждём начала...» с анимацией",
+        "ws/socket.ts для участника: auto-reconnect с exponential backoff (max 5 попыток, 1→2→4→8→16 сек)",
+        "При переподключении session_token передаётся в query-параметре для восстановления сессии"
+      ],
+      "test_steps": [
+        "Шаг 1: открыть /join → ввести код и имя → соединение установлено, переход на экран ожидания",
+        "Шаг 2: открыть /join/123456 → код подставлен автоматически, нужно только ввести имя",
+        "Шаг 3: ввести имя короче 2 символов → ошибка валидации",
+        "Шаг 4: ввести несуществующий код → сообщение об ошибке 'Комната не найдена'",
+        "Шаг 5: подключиться, открыть DevTools Network, закрыть WebSocket → наблюдать попытки реконнекта с увеличивающимися интервалами",
+        "Шаг 6: после реконнекта участник видит актуальное состояние комнаты"
+      ],
+      "dependencies": ["TASK-014", "TASK-015"],
+      "status": "pending"
+    },
+    {
+      "id": "TASK-017",
+      "category": "functional",
+      "priority": "critical",
+      "description": "Backend: проведение опроса — показ вопроса и серверный таймер",
+      "acceptance_criteria": [
+        "При действии 'show_question' от организатора: сервер отправляет {type:'question_start'} всем клиентам комнаты с данными вопроса",
+        "Серверный таймер: горутина отправляет {type:'timer_tick', data:{remaining:N}} каждую секунду",
+        "По истечении таймера: сервер автоматически отправляет {type:'question_end'}",
+        "После question_end ответы на этот вопрос не принимаются",
+        "Организатор может досрочно завершить вопрос (PATCH /api/rooms/:code/state {action:'end_question'})",
+        "После question_end сервер вычисляет и отправляет {type:'results'} и {type:'leaderboard'}"
+      ],
+      "test_steps": [
+        "Шаг 1: организатор нажимает 'Показать вопрос' → все участники получают question_start за < 500 мс",
+        "Шаг 2: наблюдать timer_tick сообщения — приходят каждую секунду",
+        "Шаг 3: дождаться истечения таймера → получить question_end автоматически",
+        "Шаг 4: после question_end отправить ответ → получить ошибку 'Время истекло'",
+        "Шаг 5: после вопроса получить results и leaderboard в правильном формате"
+      ],
+      "dependencies": ["TASK-013"],
+      "status": "pending"
+    },
+    {
+      "id": "TASK-018",
+      "category": "functional",
+      "priority": "critical",
+      "description": "Backend: приём и валидация ответов участников",
+      "acceptance_criteria": [
+        "Сервер принимает submit_answer (choice), submit_text (open_text/word_cloud), submit_vote (brainstorm)",
+        "Валидация: вопрос активен (таймер не истёк), участник не отвечал на этот вопрос ранее",
+        "Один ответ на вопрос от участника (повторная отправка → ошибка)",
+        "Ответ принимается → участник получает {type:'answer_accepted'}",
+        "Timestamp ответа фиксируется на сервере (не доверяем клиенту)",
+        "Организатор получает обновление: количество ответивших в реальном времени"
+      ],
+      "test_steps": [
+        "Шаг 1: отправить submit_answer {question_id, answer: 0} → получить answer_accepted",
+        "Шаг 2: отправить повторный submit_answer на тот же вопрос → получить ошибку",
+        "Шаг 3: дождаться конца таймера, отправить ответ → получить ошибку 'Время истекло'",
+        "Шаг 4: организатор видит счётчик ответивших, увеличивающийся в реальном времени",
+        "Шаг 5: отправить submit_answer с несуществующим question_id → ошибка"
+      ],
+      "dependencies": ["TASK-017"],
+      "status": "pending"
+    },
+    {
+      "id": "TASK-019",
+      "category": "functional",
+      "priority": "high",
+      "description": "Backend: система подсчёта баллов (scoring) и лидерборд",
+      "acceptance_criteria": [
+        "Режим 'none': баллы не начисляются",
+        "Режим 'correct_answer': за правильный ответ начисляется question.points",
+        "Режим 'speed_bonus': score = base_points × (time_remaining / time_limit), минимум 10% от base_points",
+        "При одинаковых баллах: выше тот, кто ответил быстрее (response_time_ms)",
+        "После каждого вопроса: лидерборд отправляется всем клиентам (топ-5 + позиция каждого участника)",
+        "Итоговый лидерборд при session_end"
+      ],
+      "test_steps": [
+        "Шаг 1: создать опрос с scoring_rule='correct_answer', вопрос с points=100; ответить правильно → score=100",
+        "Шаг 2: ответить неправильно → score=0",
+        "Шаг 3: создать опрос с scoring_rule='speed_bonus'; ответить сразу → максимальные баллы; ответить в последнюю секунду → минимум 10 баллов (10% от 100)",
+        "Шаг 4: лидерборд после вопроса содержит rankings отсортированный по убыванию баллов",
+        "Шаг 5: два участника с одинаковым счётом → быстрее ответивший выше",
+        "Шаг 6: unit-тест для scoring.CalculateScore() покрывает все три режима"
+      ],
+      "dependencies": ["TASK-018"],
+      "status": "pending"
+    },
+    {
+      "id": "TASK-020",
+      "category": "ui",
+      "priority": "high",
+      "description": "Frontend: экран проведения опроса для организатора",
+      "acceptance_criteria": [
+        "HostSessionPage.tsx в состоянии 'showing_question': отображает текст вопроса, таймер, варианты ответов",
+        "BarChart.tsx (recharts): real-time гистограмма распределения ответов, обновляется при каждом новом ответе",
+        "Счётчик: 'Ответили X из Y'",
+        "Кнопки: «Завершить вопрос досрочно», «Следующий вопрос»",
+        "Leaderboard.tsx: таблица топ-5 с позицией, именем и баллами",
+        "Экран хорошо смотрится при проецировании 1920×1080"
+      ],
+      "test_steps": [
+        "Шаг 1: начать вопрос → на экране организатора виден вопрос, таймер обратного отсчёта",
+        "Шаг 2: участник отвечает → гистограмма обновляется, счётчик увеличивается",
+        "Шаг 3: истёк таймер → автоматически показывается экран результатов с правильным ответом (подсвечен)",
+        "Шаг 4: показан лидерборд после вопроса",
+        "Шаг 5: кнопка «Следующий вопрос» переходит к следующему вопросу",
+        "Шаг 6: кнопка «Завершить опрос» → все участники получают session_end"
+      ],
+      "dependencies": ["TASK-015", "TASK-017", "TASK-018"],
+      "status": "pending"
+    },
+    {
+      "id": "TASK-021",
+      "category": "ui",
+      "priority": "high",
+      "description": "Frontend: экран вопроса и ответов для участника",
+      "acceptance_criteria": [
+        "ParticipantSessionPage.tsx: получив question_start — показывает вопрос, варианты ответов, таймер",
+        "SingleChoiceInput.tsx: 2-6 цветных кнопок (Kahoot-style), одно нажатие — ответ отправлен",
+        "MultipleChoiceInput.tsx: чекбоксы с кнопкой «Подтвердить»",
+        "TextInput.tsx: текстовое поле для open_text/word_cloud",
+        "После отправки: экран «Ответ принят!», кнопки заблокированы",
+        "После question_end: показывается правильность ответа (правильно/неправильно), начисленные баллы, место в рейтинге",
+        "Timer.tsx: анимированный прогресс-бар или кольцевой таймер"
+      ],
+      "test_steps": [
+        "Шаг 1: организатор показывает single_choice вопрос → участник видит 4 цветных кнопки",
+        "Шаг 2: нажать вариант → кнопки блокируются, текст «Ответ принят!»",
+        "Шаг 3: дождаться конца вопроса → кнопка правильного варианта подсвечена зелёным, неправильные — красным",
+        "Шаг 4: видны начисленные баллы и место в рейтинге",
+        "Шаг 5: организатор показывает word_cloud вопрос → видно текстовое поле, ограничение 50 символов",
+        "Шаг 6: таймер достигает 0 → ответы невозможно отправить"
+      ],
+      "dependencies": ["TASK-016", "TASK-019"],
+      "status": "pending"
+    },
+    {
+      "id": "TASK-022",
+      "category": "functional",
+      "priority": "high",
+      "description": "Backend: режим «Облако слов» — нормализация и агрегация",
+      "acceptance_criteria": [
+        "Нормализация ответа: trim → toLowerCase → удаление знаков препинания → фильтр badwords",
+        "Подсчёт частот нормализованных ответов в памяти (map[string]int) для текущей сессии/вопроса",
+        "После каждого нового ответа: организатор получает обновлённые данные частот {type:'wordcloud_update', data:{words:[{text,count}]}}",
+        "pkg/normalize/text.go: функция Normalize(text string) string",
+        "Ответы «Москва», «москва», «МОСКВА» считаются одним словом",
+        "Топ-100 слов для визуализации"
+      ],
+      "test_steps": [
+        "Шаг 1: unit-тест Normalize('  Привет, мир!  ') → 'привет мир'",
+        "Шаг 2: unit-тест Normalize('МОСКВА') == Normalize('москва') → true",
+        "Шаг 3: 3 участника отправляют 'Москва', 'москва', 'МОСКВА' → организатор получает wordcloud_update с {text:'москва', count:3}",
+        "Шаг 4: участник отправляет нецензурное слово → оно не попадает в облако",
+        "Шаг 5: отправить 101 уникальное слово → в wordcloud_update не более 100 слов (топ по частоте)"
+      ],
+      "dependencies": ["TASK-018"],
+      "status": "pending"
+    },
+    {
+      "id": "TASK-023",
+      "category": "ui",
+      "priority": "medium",
+      "description": "Frontend: визуализация облака слов в реальном времени",
+      "acceptance_criteria": [
+        "WordCloudView.tsx: использует react-wordcloud, размер слова пропорционален частоте",
+        "Обновляется при каждом wordcloud_update сообщении от сервера без перезагрузки",
+        "WordCloudInput.tsx: текстовое поле для участника с ограничением 50 символов",
+        "Организатор видит облако слов на экране проведения опроса",
+        "Кнопка «Скрыть слово» рядом с каждым словом (для модерации)"
+      ],
+      "test_steps": [
+        "Шаг 1: организатор показывает word_cloud вопрос → участники видят поле ввода",
+        "Шаг 2: 3 участника отправляют 'Москва' → на экране организатора слово 'москва' самое большое",
+        "Шаг 3: ещё 2 участника отправляют 'Россия' → облако обновилось, оба слова видны",
+        "Шаг 4: нажать «Скрыть» рядом со словом → слово исчезает из облака"
+      ],
+      "dependencies": ["TASK-022", "TASK-021"],
+      "status": "pending"
+    },
+    {
+      "id": "TASK-024",
+      "category": "functional",
+      "priority": "high",
+      "description": "Backend: режим «Брейншторм» — сбор идей, модерация, голосование",
+      "acceptance_criteria": [
+        "Фаза 1 (сбор): участник может отправить до 5 идей (текст ≤ 300 симв), каждая проверяется через badwords-фильтр, сохраняется в brainstorm_ideas",
+        "Организатор может скрыть идею (is_hidden=true) до запуска голосования",
+        "Фаза 2 (голосование): каждый участник может проголосовать за до 3 идей других участников (не своих)",
+        "UNIQUE(idea_id, participant_id) в brainstorm_votes — один голос за идею",
+        "Фаза 3 (результаты): идеи ранжированы по votes_count DESC, при равенстве — по created_at ASC",
+        "WS-сообщения: brainstorm_idea_added, brainstorm_phase_changed, brainstorm_vote_updated"
+      ],
+      "test_steps": [
+        "Шаг 1: участник отправляет 5 идей → 5 записей в brainstorm_ideas",
+        "Шаг 2: отправить 6-ю идею → ошибка 'Достигнут лимит идей'",
+        "Шаг 3: организатор скрывает идею → is_hidden=true; другие участники её не видят",
+        "Шаг 4: переход к фазе голосования → участники видят список нескрытых идей",
+        "Шаг 5: проголосовать за свою идею → ошибка",
+        "Шаг 6: проголосовать за 3 идеи → 4-й голос → ошибка",
+        "Шаг 7: результаты — идея с 3 голосами выше идеи с 1 голосом"
+      ],
+      "dependencies": ["TASK-018"],
+      "status": "pending"
+    },
+    {
+      "id": "TASK-025",
+      "category": "ui",
+      "priority": "medium",
+      "description": "Frontend: UI режима «Брейншторм» — ввод идей, голосование, результаты",
+      "acceptance_criteria": [
+        "BrainstormInput.tsx: текстовое поле + кнопка «Добавить идею», список своих идей, счётчик оставшихся идей",
+        "В фазе голосования: список чужих идей с кнопкой «+» (голос), счётчик оставшихся голосов (3)",
+        "BrainstormBoard.tsx: организатор видит все идеи в реальном времени, кнопка скрыть/показать",
+        "Результаты: ранжированный список с количеством голосов, анимированное появление",
+        "Кнопки переключения фаз (сбор → голосование → результаты) у организатора"
+      ],
+      "test_steps": [
+        "Шаг 1: участник вводит идею → появляется в его списке и на экране организатора",
+        "Шаг 2: добавить 5 идей → поле ввода блокируется",
+        "Шаг 3: организатор переключает в фазу голосования → участники видят чужие идеи",
+        "Шаг 4: нажать «+» у идеи → счётчик голосов уменьшается, кнопка у идеи меняется",
+        "Шаг 5: организатор показывает результаты → ранжированный список"
+      ],
+      "dependencies": ["TASK-024", "TASK-021"],
+      "status": "pending"
+    },
+    {
+      "id": "TASK-026",
+      "category": "security",
+      "priority": "high",
+      "description": "Backend: контент-контроль — фильтр нецензурной лексики",
+      "acceptance_criteria": [
+        "pkg/badwords/filter.go: функция Filter(text string) (filtered string, hasBadWords bool)",
+        "pkg/badwords/dictionary.go: словарь из badwords.json (русский + английский)",
+        "Нормализация перед проверкой: lowercase, удаление пробелов внутри слова, транслитерация распространённых обходов",
+        "Нецензурные слова заменяются на '***'",
+        "Фильтр не блокирует отправку — только маскирует при отображении",
+        "Словарь расширяемый (перезагрузка без рестарта сервера)",
+        "Применяется к: open_text, word_cloud, brainstorm идеям"
+      ],
+      "test_steps": [
+        "Шаг 1: unit-тест Filter('нецензурное слово') → '*** слово', hasBadWords=true",
+        "Шаг 2: unit-тест Filter('чистый текст') → 'чистый текст', hasBadWords=false",
+        "Шаг 3: Filter с обходом через пробелы ('н е ц е н з у р н о е') → всё равно маскируется",
+        "Шаг 4: добавить слово в badwords.json без перезапуска → слово фильтруется (hot reload)",
+        "Шаг 5: участник отправляет нецензурное слово в open_text → организатор видит '***', слово сохранено в БД в замаскированном виде"
+      ],
+      "dependencies": ["TASK-003"],
+      "status": "pending"
+    },
+    {
+      "id": "TASK-027",
+      "category": "functional",
+      "priority": "medium",
+      "description": "Backend: ручная модерация ответов организатором",
+      "acceptance_criteria": [
+        "PATCH /api/sessions/:sessionId/answers/:answerId {action: 'hide'|'show'} — скрыть/показать ответ",
+        "PATCH /api/sessions/:sessionId/ideas/:ideaId {action: 'hide'|'show'} — для брейншторма",
+        "Скрытый ответ: is_hidden=true в БД, WS-сообщение answer_hidden отправляется всем клиентам",
+        "Скрытый ответ исчезает из облака слов/списка идей у участников",
+        "Скрытый ответ доступен только организатору в панели модерации",
+        "Только организатор текущей комнаты может модерировать"
+      ],
+      "test_steps": [
+        "Шаг 1: участник отправляет ответ → организатор видит его в real-time панели",
+        "Шаг 2: организатор нажимает «Скрыть» → ответ исчезает из облака слов у участников",
+        "Шаг 3: ответ с is_hidden=true не учитывается в визуализации, но сохранён в БД",
+        "Шаг 4: попытка скрыть ответ из чужой комнаты → 403 Forbidden",
+        "Шаг 5: организатор нажимает «Показать» → ответ снова появляется"
+      ],
+      "dependencies": ["TASK-022", "TASK-024", "TASK-026"],
+      "status": "pending"
+    },
+    {
+      "id": "TASK-028",
+      "category": "functional",
+      "priority": "medium",
+      "description": "Backend: история сессий и детализация результатов",
+      "acceptance_criteria": [
+        "GET /api/sessions — список всех сессий организатора: дата, название опроса, кол-во участников, средний балл",
+        "GET /api/sessions/:id — детализация: список вопросов с распределением ответов, лидерборд",
+        "GET /api/sessions/:id/participants — список участников с итоговыми баллами",
+        "GET /api/sessions/:id/answers — все ответы всех участников (для экспорта)",
+        "Сессии финишированы (status='finished') — исторические данные не изменяются"
+      ],
+      "test_steps": [
+        "Шаг 1: провести полную сессию, завершить → GET /api/sessions → сессия в списке",
+        "Шаг 2: GET /api/sessions/:id → данные: poll title, started_at, finished_at, participant_count",
+        "Шаг 3: GET /api/sessions/:id/participants → список с total_score",
+        "Шаг 4: GET /api/sessions/:id с токеном другого организатора → 403",
+        "Шаг 5: данные сессии не меняются при повторном запросе (иммутабельная история)"
+      ],
+      "dependencies": ["TASK-019"],
+      "status": "pending"
+    },
+    {
+      "id": "TASK-029",
+      "category": "ui",
+      "priority": "medium",
+      "description": "Frontend: страница истории сессий и детализации результатов",
+      "acceptance_criteria": [
+        "Вкладка/страница «История» в дашборде: список проведённых сессий",
+        "PollResultsPage.tsx: детальная страница сессии — итоговый лидерборд, статистика по вопросам",
+        "BarChart.tsx: гистограмма распределения ответов для каждого choice-вопроса",
+        "TextResponses.tsx: список текстовых ответов для open_text",
+        "WordCloudView.tsx: облако слов для word_cloud вопросов (данные из истории)",
+        "BrainstormBoard.tsx: результаты брейншторма (из истории)",
+        "Кнопки экспорта CSV и PDF на странице детализации"
+      ],
+      "test_steps": [
+        "Шаг 1: открыть /dashboard → вкладка «История» содержит проведённые сессии",
+        "Шаг 2: нажать на сессию → переход на /sessions/:id с детализацией",
+        "Шаг 3: видна статистика по каждому вопросу с графиком распределения",
+        "Шаг 4: виден итоговый лидерборд",
+        "Шаг 5: на странице присутствуют кнопки «Скачать CSV» и «Скачать PDF»"
+      ],
+      "dependencies": ["TASK-028", "TASK-009"],
+      "status": "pending"
+    },
+    {
+      "id": "TASK-030",
+      "category": "functional",
+      "priority": "medium",
+      "description": "Backend: экспорт результатов в CSV",
+      "acceptance_criteria": [
+        "GET /api/sessions/:id/export/csv — скачать CSV-файл",
+        "Кодировка: UTF-8 с BOM для корректного открытия в Excel",
+        "Колонки: participant_name, question_text, answer, is_correct, score, response_time_ms",
+        "Одна строка на каждый ответ каждого участника",
+        "Скрытые (hidden) ответы НЕ включаются в экспорт",
+        "Content-Disposition: attachment; filename=session_{id}_{date}.csv"
+      ],
+      "test_steps": [
+        "Шаг 1: GET /api/sessions/:id/export/csv → браузер скачивает файл",
+        "Шаг 2: открыть в Excel → кириллица читаема, нет кракозябр",
+        "Шаг 3: проверить колонки: все 6 присутствуют",
+        "Шаг 4: скрытый ответ не включён в файл",
+        "Шаг 5: GET с токеном чужого организатора → 403"
+      ],
+      "dependencies": ["TASK-028"],
+      "status": "pending"
+    },
+    {
+      "id": "TASK-031",
+      "category": "functional",
+      "priority": "low",
+      "description": "Backend: генерация PDF-отчёта о сессии",
+      "acceptance_criteria": [
+        "GET /api/sessions/:id/export/pdf — генерирует PDF и возвращает его",
+        "Титульная страница: название опроса, дата, кол-во участников",
+        "Общая статистика: среднее время ответа, средний балл, % правильных ответов",
+        "По каждому вопросу: текст, распределение ответов (bar chart как изображение), правильный ответ",
+        "Итоговый лидерборд (топ-10)",
+        "Параметр ?charts=base64-encoded-png передаёт изображения графиков (с фронтенда через html2canvas)",
+        "Библиотека: jung-kurt/gofpdf"
+      ],
+      "test_steps": [
+        "Шаг 1: POST /api/sessions/:id/export/pdf с телом {charts: [...base64]} → 200, скачивается PDF",
+        "Шаг 2: открыть PDF → титульная страница, статистика, лидерборд присутствуют",
+        "Шаг 3: PDF содержит графики (не placeholder)",
+        "Шаг 4: PDF визуально оформлен (не plain text, есть заголовки, форматирование)",
+        "Шаг 5: файл скачивается с корректным именем (Content-Disposition)"
+      ],
+      "dependencies": ["TASK-028"],
+      "status": "pending"
+    },
+    {
+      "id": "TASK-032",
+      "category": "ui",
+      "priority": "low",
+      "description": "Frontend: кнопки экспорта CSV и PDF с рендерингом графиков",
+      "acceptance_criteria": [
+        "hooks/useExport.ts: exportCsv(sessionId), exportPdf(sessionId) — инициируют скачивание",
+        "Для PDF: рендерить графики в скрытый div, конвертировать через html2canvas в base64, отправить на бэкенд",
+        "Кнопка «Скачать CSV» — прямой GET запрос, браузер скачивает файл",
+        "Кнопка «Скачать PDF» — loader пока идёт генерация, затем скачивание",
+        "Обработка ошибок: toast-уведомление при неудаче"
+      ],
+      "test_steps": [
+        "Шаг 1: нажать «Скачать CSV» → браузер скачивает .csv файл",
+        "Шаг 2: нажать «Скачать PDF» → loader, затем скачивается .pdf файл",
+        "Шаг 3: PDF содержит графики с реальными данными",
+        "Шаг 4: при ошибке сети → отображается toast-уведомление об ошибке"
+      ],
+      "dependencies": ["TASK-029", "TASK-030", "TASK-031"],
+      "status": "pending"
+    },
+    {
+      "id": "TASK-033",
+      "category": "ui",
+      "priority": "medium",
+      "description": "Frontend: статистика в реальном времени для организатора (панель мониторинга)",
+      "acceptance_criteria": [
+        "Во время вопроса: прогресс-бар 'Ответили X из Y', % ответивших",
+        "Список участников с иконкой: ✓ ответил / ◷ ожидает / ✗ отключён",
+        "Среднее время ответа (обновляется по мере поступления ответов)",
+        "BarChart с реальным распределением ответов (choice-вопросы)",
+        "Все данные приходят через WebSocket, без polling"
+      ],
+      "test_steps": [
+        "Шаг 1: 5 участников подключено, 2 ответили → прогресс-бар показывает 2/5 (40%)",
+        "Шаг 2: третий участник отвечает → прогресс-бар обновляется до 3/5 без перезагрузки",
+        "Шаг 3: один участник отключился → его иконка меняется на ✗",
+        "Шаг 4: гистограмма обновляется при каждом новом ответе"
+      ],
+      "dependencies": ["TASK-020", "TASK-018"],
+      "status": "pending"
+    },
+    {
+      "id": "TASK-034",
+      "category": "ui",
+      "priority": "medium",
+      "description": "Frontend: экраны завершения вопроса и финала для участника",
+      "acceptance_criteria": [
+        "После question_end: экран с правильным/неправильным ответом (зелёный/красный)",
+        "Показываются начисленные баллы и анимация (+100 очков)",
+        "Позиция в рейтинге: 'Вы на 3 месте из 10'",
+        "После session_end: итоговый экран — финальный балл, место, пьедестал топ-3",
+        "Кнопка «Вернуться на главную» после финала",
+        "Анимации: плавные переходы между экранами"
+      ],
+      "test_steps": [
+        "Шаг 1: ответить правильно → вариант подсвечен зелёным, показаны начисленные баллы",
+        "Шаг 2: ответить неправильно → правильный вариант показан зелёным, выбранный — красным",
+        "Шаг 3: лидерборд после вопроса → участник видит свою позицию",
+        "Шаг 4: организатор завершает опрос → участник видит финальный экран с итоговым результатом",
+        "Шаг 5: топ-3 выделен на финальном экране"
+      ],
+      "dependencies": ["TASK-021", "TASK-019"],
+      "status": "pending"
+    },
+    {
+      "id": "TASK-035",
+      "category": "security",
+      "priority": "high",
+      "description": "Backend: middleware — CORS, логирование, rate limiting",
+      "acceptance_criteria": [
+        "CORS middleware: разрешает запросы только с домена фронтенда (из конфига), корректно обрабатывает preflight OPTIONS",
+        "Logging middleware: структурированный slog — метод, путь, статус, длительность для каждого запроса",
+        "Rate limit middleware: 5 req/min на /api/auth/* эндпоинты (по IP)",
+        "Auth middleware: извлекает JWT из Authorization header, помещает user_id в context",
+        "Все middleware зарегистрированы в handler/routes.go в правильном порядке"
+      ],
+      "test_steps": [
+        "Шаг 1: GET /api/polls с Origin: http://malicious.com → ответ без Access-Control-Allow-Origin",
+        "Шаг 2: GET /api/polls с Origin: http://localhost:5173 → Access-Control-Allow-Origin присутствует",
+        "Шаг 3: 6 POST /api/auth/login за 1 минуту → 6-й получает 429",
+        "Шаг 4: GET /api/polls без токена → 401",
+        "Шаг 5: в логах каждый запрос записан с method, path, status, duration"
+      ],
+      "dependencies": ["TASK-005"],
+      "status": "pending"
+    },
+    {
+      "id": "TASK-036",
+      "category": "integration",
+      "priority": "high",
+      "description": "Nginx: конфигурация reverse proxy для dev и prod",
+      "acceptance_criteria": [
+        "nginx/nginx.conf: upstream для backend (:8080) и frontend (:5173)",
+        "Маршруты: /api/* и /ws/* → backend, всё остальное → frontend",
+        "WebSocket upgrade корректно проксируется (Connection: upgrade, Upgrade: websocket)",
+        "Статические файлы uploads/ отдаются Nginx напрямую (не через Go)",
+        "docker-compose.prod.yml: frontend билдится как статика, Nginx отдаёт dist/ напрямую",
+        "Gzip-компрессия для статических ресурсов"
+      ],
+      "test_steps": [
+        "Шаг 1: docker compose up → http://localhost → открывается фронтенд",
+        "Шаг 2: http://localhost/api/health → ответ от Go-сервера",
+        "Шаг 3: WebSocket соединение через ws://localhost/ws/room/123456 → успешный upgrade",
+        "Шаг 4: http://localhost/uploads/images/test.jpg → изображение скачивается",
+        "Шаг 5: curl -H 'Accept-Encoding: gzip' http://localhost/ → Content-Encoding: gzip"
+      ],
+      "dependencies": ["TASK-002", "TASK-004"],
+      "status": "pending"
+    },
+    {
+      "id": "TASK-037",
+      "category": "integration",
+      "priority": "medium",
+      "description": "Docker: multi-stage сборка для production",
+      "acceptance_criteria": [
+        "backend/Dockerfile: multi-stage — builder (go build) + runtime (scratch/alpine), финальный образ < 30 МБ",
+        "frontend/Dockerfile: multi-stage — builder (npm run build) + nginx для отдачи dist/",
+        "docker-compose.prod.yml: использует prod Dockerfile, нет volume-монтирования исходников, health checks",
+        "Переменные окружения только через .env файл (не hardcoded)",
+        "Образы собираются без ошибок"
+      ],
+      "test_steps": [
+        "Шаг 1: docker compose -f docker-compose.prod.yml build → все образы собраны",
+        "Шаг 2: docker images → backend-образ < 30 МБ",
+        "Шаг 3: docker compose -f docker-compose.prod.yml up → приложение работает как в dev",
+        "Шаг 4: docker compose -f docker-compose.prod.yml ps → все сервисы healthy (health check проходит)"
+      ],
+      "dependencies": ["TASK-036"],
+      "status": "pending"
+    },
+    {
+      "id": "TASK-038",
+      "category": "infrastructure",
+      "priority": "low",
+      "description": "CI/CD: GitHub Actions pipeline для автодеплоя",
+      "acceptance_criteria": [
+        ".github/workflows/deploy.yml: триггер на push в master",
+        "Job build: checkout, go build, go test ./..., npm run build",
+        "Job deploy: SSH на VPS через appleboy/ssh-action, docker compose pull + up -d",
+        "Секреты: VPS_HOST, VPS_USER, VPS_SSH_KEY хранятся в GitHub Secrets",
+        "При падении тестов — деплой не запускается"
+      ],
+      "test_steps": [
+        "Шаг 1: создать тестовый коммит в master → в GitHub Actions виден запущенный workflow",
+        "Шаг 2: workflow проходит все шаги без ошибок",
+        "Шаг 3: сломать тест в go → workflow падает на шаге test, деплой не происходит",
+        "Шаг 4: после успешного деплоя — приложение обновлено на VPS"
+      ],
+      "dependencies": ["TASK-037"],
+      "status": "pending"
+    },
+    {
+      "id": "TASK-039",
+      "category": "functional",
+      "priority": "high",
+      "description": "Backend: unit-тесты для критических модулей",
+      "acceptance_criteria": [
+        "Тесты для service/conduct_service.go: scoring в режимах none, correct_answer, speed_bonus",
+        "Тесты для pkg/badwords/filter.go: фильтрация, нормализация, edge cases",
+        "Тесты для pkg/normalize/text.go: нормализация текста",
+        "Тесты для internal/ws/room.go: State machine transitions",
+        "Покрытие критических функций > 80%",
+        "go test ./... выполняется без ошибок"
+      ],
+      "test_steps": [
+        "Шаг 1: go test ./... → все тесты проходят, нет failed",
+        "Шаг 2: go test -cover ./internal/... → coverage > 80% для service/ и pkg/",
+        "Шаг 3: go test -race ./... → нет race conditions",
+        "Шаг 4: CalculateScore(100, 30, 30, 'speed_bonus') → 100 (максимум)",
+        "Шаг 5: CalculateScore(100, 30, 0, 'speed_bonus') → 10 (минимум 10%)"
+      ],
+      "dependencies": ["TASK-019", "TASK-026", "TASK-022"],
+      "status": "pending"
+    },
+    {
+      "id": "TASK-040",
+      "category": "integration",
+      "priority": "medium",
+      "description": "Backend: интеграционные тесты основных API-сценариев",
+      "acceptance_criteria": [
+        "Тест: регистрация → логин → создание опроса → добавление вопросов → запуск комнаты → подключение участника → ответ → результаты",
+        "Используется тестовая БД (PostgreSQL в Docker через testcontainers или test-specific конфиг)",
+        "Тесты изолированы (каждый тест начинает с чистого состояния)",
+        "Тест WS: подключение, получение question_start, отправка submit_answer, получение answer_accepted"
+      ],
+      "test_steps": [
+        "Шаг 1: go test -tags=integration ./... → интеграционные тесты проходят",
+        "Шаг 2: тест полного сценария опроса завершается успехом",
+        "Шаг 3: тест WebSocket-взаимодействия завершается успехом"
+      ],
+      "dependencies": ["TASK-039"],
+      "status": "pending"
+    },
+    {
+      "id": "TASK-041",
+      "category": "ui",
+      "priority": "medium",
+      "description": "Frontend: responsive дизайн и мобильная оптимизация для участников",
+      "acceptance_criteria": [
+        "Экран участника корректно работает на 320px–428px (mobile)",
+        "Кнопки ответов минимум 48px в высоту",
+        "Шрифт вопроса минимум 18px",
+        "Экран организатора при проецировании 1920×1080 читаем (крупные элементы)",
+        "Tailwind breakpoints: sm (320px), md (768px), lg (1024px) задействованы",
+        "Контрастность соответствует WCAG AA (≥ 4.5:1)"
+      ],
+      "test_steps": [
+        "Шаг 1: открыть DevTools → Responsive, выбрать iPhone SE (375px) → экран участника читаем",
+        "Шаг 2: кнопки ответов ≥ 48px (измерить в DevTools)",
+        "Шаг 3: шрифт вопроса ≥ 18px в мобильном виде",
+        "Шаг 4: открыть экран организатора в 1920×1080 → все элементы читаемы без масштабирования",
+        "Шаг 5: использовать https://webaim.org/resources/contrastchecker/ для проверки основных цветовых пар"
+      ],
+      "dependencies": ["TASK-021", "TASK-020"],
+      "status": "pending"
+    },
+    {
+      "id": "TASK-042",
+      "category": "ui",
+      "priority": "low",
+      "description": "Frontend: анимации переходов и UX-полировка",
+      "acceptance_criteria": [
+        "Плавный переход между вопросами (fade-in/slide-in)",
+        "Анимация таймера (убывающий прогресс-бар с цветовым изменением: зелёный → жёлтый → красный)",
+        "Анимация лидерборда (элементы появляются поочерёдно)",
+        "Анимация счёта участника (+N очков всплывает и исчезает)",
+        "Скелетон-загрузчики везде где есть async данные",
+        "Toast-уведомления для ошибок и успешных действий"
+      ],
+      "test_steps": [
+        "Шаг 1: переход между вопросами — анимация плавная, нет резкого мигания",
+        "Шаг 2: таймер меняет цвет с зелёного на красный по мере убывания",
+        "Шаг 3: лидерборд появляется с анимацией, элементы последовательно",
+        "Шаг 4: участник получает +100 → на экране появляется всплывающая анимация счёта",
+        "Шаг 5: при загрузке дашборда — скелетон вместо пустого экрана"
+      ],
+      "dependencies": ["TASK-034", "TASK-041"],
+      "status": "pending"
+    },
+    {
+      "id": "TASK-043",
+      "category": "functional",
+      "priority": "medium",
+      "description": "Frontend: история пройденных опросов для участника (localStorage)",
+      "acceptance_criteria": [
+        "session_token и результаты сессии сохраняются в localStorage после завершения",
+        "Страница /my-results (или раздел на JoinPage) показывает список пройденных опросов",
+        "Для каждой записи: название опроса, дата, финальный балл, место",
+        "При потере localStorage — история недоступна (это нормально, предупреждение пользователю)",
+        "Данные загружаются из /api/sessions?session_token=:token"
+      ],
+      "test_steps": [
+        "Шаг 1: пройти опрос → localStorage содержит запись о сессии",
+        "Шаг 2: открыть /my-results → видна запись об опросе с баллами",
+        "Шаг 3: очистить localStorage → история исчезла, предупреждение присутствует",
+        "Шаг 4: пройти два опроса → оба отображаются в истории"
+      ],
+      "dependencies": ["TASK-028", "TASK-034"],
+      "status": "pending"
+    },
+    {
+      "id": "TASK-044",
+      "category": "security",
+      "priority": "medium",
+      "description": "Backend: восстановление пароля через email",
+      "acceptance_criteria": [
+        "POST /api/auth/forgot-password {email} — отправляет письмо с одноразовой ссылкой (TTL 1 час)",
+        "POST /api/auth/reset-password {token, new_password} — сбрасывает пароль",
+        "Токен одноразовый — после использования инвалидируется",
+        "Истёкший токен возвращает 400",
+        "Несуществующий email — ответ 200 (не раскрываем наличие аккаунта)",
+        "SMTP-конфигурация через переменные окружения"
+      ],
+      "test_steps": [
+        "Шаг 1: POST /api/auth/forgot-password {email: test@test.com} → 200 (всегда)",
+        "Шаг 2: проверить почту → письмо с ссылкой вида /reset-password?token=...",
+        "Шаг 3: POST /api/auth/reset-password с валидным токеном и новым паролем → 200",
+        "Шаг 4: войти со старым паролем → 401",
+        "Шаг 5: войти с новым паролем → 200",
+        "Шаг 6: повторно использовать тот же токен → 400"
+      ],
+      "dependencies": ["TASK-005"],
+      "status": "pending"
+    },
+    {
+      "id": "TASK-045",
+      "category": "functional",
+      "priority": "medium",
+      "description": "Backend: режим random для порядка вопросов",
+      "acceptance_criteria": [
+        "Если poll.question_order='random': при старте сессии вопросы перемешиваются (Fisher-Yates shuffle)",
+        "Перемешанный порядок фиксируется для сессии (все участники видят одинаковый порядок)",
+        "Если poll.question_order='sequential': вопросы в порядке position",
+        "Порядок сохраняется в sessions таблице (новое поле question_order JSONB — массив question_id)"
+      ],
+      "test_steps": [
+        "Шаг 1: создать опрос с 5 вопросами и question_order='random', запустить 2 сессии → порядки скорее всего разные",
+        "Шаг 2: в рамках одной сессии все участники видят вопросы в одинаковом порядке",
+        "Шаг 3: создать опрос с question_order='sequential' → вопросы идут по position"
+      ],
+      "dependencies": ["TASK-017"],
+      "status": "pending"
+    },
+    {
+      "id": "TASK-046",
+      "category": "integration",
+      "priority": "high",
+      "description": "E2E: полный сценарий квиза от создания до результатов",
+      "acceptance_criteria": [
+        "Сценарий проходит полностью: регистрация → создание опроса → добавление вопросов (single_choice + open_text) → запуск комнаты → подключение 3 участников → проведение 2 вопросов → финал → экспорт CSV",
+        "Все участники получают корректные баллы",
+        "Лидерборд правильно отсортирован",
+        "CSV скачивается и содержит 6 строк (3 участника × 2 вопроса)"
+      ],
+      "test_steps": [
+        "Шаг 1: организатор регистрируется и создаёт опрос с 2 вопросами",
+        "Шаг 2: запускает комнату → 3 участника подключаются",
+        "Шаг 3: проводит первый вопрос → все 3 участника отвечают",
+        "Шаг 4: проводит второй вопрос",
+        "Шаг 5: завершает опрос → финальный лидерборд у участников",
+        "Шаг 6: организатор идёт в историю → скачивает CSV → файл содержит 6 строк данных"
+      ],
+      "dependencies": ["TASK-030", "TASK-029", "TASK-034"],
+      "status": "pending"
+    }
+  ]
+}
