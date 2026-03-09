@@ -39,6 +39,7 @@ func main() {
 	questionRepo := repository.NewPostgresQuestionRepo(db)
 	sessionRepo := repository.NewPostgresSessionRepo(db)
 	participantRepo := repository.NewPostgresParticipantRepo(db)
+	answerRepo := repository.NewPostgresAnswerRepo(db)
 
 	authSvc := service.NewAuthService(
 		userRepo,
@@ -54,6 +55,7 @@ func main() {
 
 	roomSvc := service.NewRoomService(sessionRepo, pollRepo, hub)
 	participantSvc := service.NewParticipantService(participantRepo, sessionRepo, hub)
+	conductSvc := service.NewConductService(questionRepo, sessionRepo, pollRepo, answerRepo, hub)
 
 	router := handler.NewRouter(handler.RouterDeps{
 		AuthService:         authSvc,
@@ -61,6 +63,7 @@ func main() {
 		QuestionService:     questionSvc,
 		RoomService:         roomSvc,
 		ParticipantService:  participantSvc,
+		ConductService:      conductSvc,
 		WSHandler:           wsHandler,
 		JWTSecret:           cfg.JWTSecret,
 		RefreshTokenTTLDays: cfg.JWTRefreshTokenTTL,
