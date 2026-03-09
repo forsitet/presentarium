@@ -82,7 +82,7 @@
         "Шаг 5: migrate up снова → чистая применяемость"
       ],
       "dependencies": ["TASK-002"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-004",

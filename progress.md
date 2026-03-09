@@ -3,9 +3,9 @@
 ## Статус проекта
 
 **Всего задач:** 46
-**Выполнено:** 1
+**Выполнено:** 3
 **В работе:** 0
-**Ожидает:** 45
+**Ожидает:** 43
 
 ## Сессии работы агентов
 
@@ -66,6 +66,32 @@
 - backend/pkg/badwords/filter.go (новый)
 
 **ВАЖНО для следующей итерации:** перед `go build` нужно выполнить `go mod tidy` в директории backend/ для загрузки зависимостей и обновления go.sum.
+
+**Статус:** done
+
+---
+
+### 2025-12-01 11:30 — TASK-003: PostgreSQL-миграции и схема базы данных
+**Что сделано:**
+- backend/migrations/000001_create_users.up/down.sql: таблицы users (UUID PK, email UNIQUE, password_hash, name, timestamps) и refresh_tokens (с индексами)
+- backend/migrations/000002_create_polls_questions.up/down.sql: таблицы polls (user_id FK, scoring_rule CHECK, question_order CHECK) и questions (poll_id FK каскадное удаление, JSONB options, time_limit CHECK 5-300, position, индексы)
+- backend/migrations/000003_create_sessions_participants.up/down.sql: таблицы sessions (room_code UNIQUE, status CHECK, JSONB question_order, partial UNIQUE INDEX на poll_id WHERE status<>'finished') и participants (session_token UNIQUE UUID)
+- backend/migrations/000004_create_answers_brainstorm.up/down.sql: таблицы answers (UNIQUE participant_id+question_id, JSONB answer, is_hidden), brainstorm_ideas (votes_count), brainstorm_votes (UNIQUE idea_id+participant_id) + trigger для автообновления votes_count
+- backend/cmd/migrate/main.go: CLI-инструмент для up/down/version через golang-migrate
+
+**Изменённые файлы:**
+- backend/migrations/000001_create_users.up.sql (новый)
+- backend/migrations/000001_create_users.down.sql (новый)
+- backend/migrations/000002_create_polls_questions.up.sql (новый)
+- backend/migrations/000002_create_polls_questions.down.sql (новый)
+- backend/migrations/000003_create_sessions_participants.up.sql (новый)
+- backend/migrations/000003_create_sessions_participants.down.sql (новый)
+- backend/migrations/000004_create_answers_brainstorm.up.sql (новый)
+- backend/migrations/000004_create_answers_brainstorm.down.sql (новый)
+- backend/cmd/migrate/main.go (новый)
+- tasks.json (TASK-003 status → done)
+
+**ВАЖНО для следующей итерации:** перед `go build ./...` выполни `go mod tidy` в backend/ — go.sum пустой, зависимости не подтянуты. Migrate CLI: `go run ./cmd/migrate up`, путь к миграциям задаётся через env MIGRATIONS_PATH (по умолчанию "./migrations").
 
 **Статус:** done
 
