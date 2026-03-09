@@ -121,6 +121,15 @@ type ResultsData struct {
 type AnswerAcceptedData struct {
 	QuestionID uuid.UUID `json:"question_id"`
 	Score      int       `json:"score"`
+	IsCorrect  *bool     `json:"is_correct,omitempty"`
+}
+
+// SessionEndData is broadcast to all clients when the session ends.
+// MyRank and MyScore are populated only for participant recipients.
+type SessionEndData struct {
+	Rankings []LeaderboardEntry `json:"rankings"`
+	MyRank   int                `json:"my_rank,omitempty"`
+	MyScore  int                `json:"my_score,omitempty"`
 }
 
 // AnswerCountData is sent to the organizer when a new answer arrives.
