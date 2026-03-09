@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -50,13 +51,17 @@ func NewConductService(
 	}
 }
 
-// HandleMessage dispatches incoming WebSocket messages from the organizer.
+// HandleMessage dispatches incoming WebSocket messages from the organizer or participants.
 func (s *conductService) HandleMessage(c *ws.Client, room *ws.Room, env ws.Envelope) {
 	switch env.Type {
 	case ws.MsgTypeShowQuestion:
 		s.handleShowQuestion(c, room, env)
 	case ws.MsgTypeEndQuestion:
 		s.handleEndQuestion(c, room)
+	case ws.MsgTypeSubmitAnswer:
+		s.handleSubmitAnswer(c, room, env)
+	case ws.MsgTypeSubmitText:
+		s.handleSubmitText(c, room, env)
 	}
 }
 
@@ -137,6 +142,7 @@ func (s *conductService) handleShowQuestion(c *ws.Client, room *ws.Room, env ws.
 	}
 	room.SetCurrentQuestion(activeQ)
 	room.SetState(ws.StateShowingQuestion)
+	room.ResetAnswerCount()
 
 	// Build options payload hiding is_correct from participants.
 	optionsForParticipants, _ := buildParticipantOptions(q.Options)
@@ -286,6 +292,222 @@ func buildParticipantOptions(opts model.OptionList) (json.RawMessage, error) {
 		masked[i] = participantOption{Text: o.Text, ImageURL: o.ImageURL}
 	}
 	return json.Marshal(masked)
+}
+
+// handleSubmitAnswer processes a participant's choice answer (single/multiple/image_choice).
+func (s *conductService) handleSubmitAnswer(c *ws.Client, room *ws.Room, env ws.Envelope) {
+	if c.Role() != ws.RoleParticipant {
+		sendError(room, c, "only participants can submit answers")
+		return
+	}
+	participantID := c.ParticipantID()
+	if participantID == nil {
+		sendError(room, c, "participant not registered")
+		return
+	}
+
+	current := room.CurrentQuestion()
+	if current == nil {
+		sendError(room, c, "question has ended or not started")
+		return
+	}
+
+	var data ws.SubmitAnswerData
+	if err := json.Unmarshal(env.Data, &data); err != nil {
+		sendError(room, c, "invalid submit_answer payload")
+		return
+	}
+	if data.QuestionID != current.ID {
+		sendError(room, c, "question mismatch")
+		return
+	}
+
+	ctx := context.Background()
+
+	// Prevent duplicate answers.
+	_, err := s.answerRepo.GetByParticipantAndQuestion(ctx, *participantID, data.QuestionID)
+	if err == nil {
+		sendError(room, c, "already answered this question")
+		return
+	}
+	if !errors.Is(err, errs.ErrNotFound) {
+		sendError(room, c, "internal error")
+		return
+	}
+
+	// Fetch question to determine correctness.
+	q, err := s.questionRepo.GetByID(ctx, data.QuestionID)
+	if err != nil {
+		sendError(room, c, "question not found")
+		return
+	}
+
+	isCorrect := computeIsCorrect(q, data.Answer)
+	responseTimeMs := int(time.Since(time.Unix(current.StartedAt, 0)).Milliseconds())
+
+	answer := &model.Answer{
+		ID:             uuid.New(),
+		ParticipantID:  *participantID,
+		QuestionID:     data.QuestionID,
+		SessionID:      room.SessionID(),
+		Answer:         json.RawMessage(data.Answer),
+		IsCorrect:      isCorrect,
+		Score:          0, // Scoring computed in TASK-019
+		ResponseTimeMs: responseTimeMs,
+		IsHidden:       false,
+		AnsweredAt:     time.Now(),
+	}
+
+	if err := s.answerRepo.Create(ctx, answer); err != nil {
+		sendError(room, c, "failed to save answer")
+		return
+	}
+
+	count := room.IncrementAnswerCount()
+	total := room.ParticipantCount()
+
+	if msg, err2 := ws.NewEnvelope(ws.MsgTypeAnswerAccepted, ws.AnswerAcceptedData{
+		QuestionID: data.QuestionID,
+		Score:      0,
+	}); err2 == nil {
+		room.SendToClient(c, msg)
+	}
+
+	if msg, err2 := ws.NewEnvelope(ws.MsgTypeAnswerCount, ws.AnswerCountData{
+		Answered: count,
+		Total:    total,
+	}); err2 == nil {
+		room.SendToOrganizer(msg)
+	}
+
+	slog.Debug("answer submitted", "participant_id", *participantID, "question_id", data.QuestionID, "answered", count, "total", total)
+}
+
+// handleSubmitText processes a participant's text answer (open_text, word_cloud).
+func (s *conductService) handleSubmitText(c *ws.Client, room *ws.Room, env ws.Envelope) {
+	if c.Role() != ws.RoleParticipant {
+		sendError(room, c, "only participants can submit answers")
+		return
+	}
+	participantID := c.ParticipantID()
+	if participantID == nil {
+		sendError(room, c, "participant not registered")
+		return
+	}
+
+	current := room.CurrentQuestion()
+	if current == nil {
+		sendError(room, c, "question has ended or not started")
+		return
+	}
+
+	var data ws.SubmitTextData
+	if err := json.Unmarshal(env.Data, &data); err != nil {
+		sendError(room, c, "invalid submit_text payload")
+		return
+	}
+	if data.QuestionID != current.ID {
+		sendError(room, c, "question mismatch")
+		return
+	}
+
+	ctx := context.Background()
+
+	// Prevent duplicate answers.
+	_, err := s.answerRepo.GetByParticipantAndQuestion(ctx, *participantID, data.QuestionID)
+	if err == nil {
+		sendError(room, c, "already answered this question")
+		return
+	}
+	if !errors.Is(err, errs.ErrNotFound) {
+		sendError(room, c, "internal error")
+		return
+	}
+
+	responseTimeMs := int(time.Since(time.Unix(current.StartedAt, 0)).Milliseconds())
+	textJSON, _ := json.Marshal(data.Text)
+
+	answer := &model.Answer{
+		ID:             uuid.New(),
+		ParticipantID:  *participantID,
+		QuestionID:     data.QuestionID,
+		SessionID:      room.SessionID(),
+		Answer:         json.RawMessage(textJSON),
+		IsCorrect:      nil, // text answers have no correct/incorrect concept
+		Score:          0,
+		ResponseTimeMs: responseTimeMs,
+		IsHidden:       false,
+		AnsweredAt:     time.Now(),
+	}
+
+	if err := s.answerRepo.Create(ctx, answer); err != nil {
+		sendError(room, c, "failed to save answer")
+		return
+	}
+
+	count := room.IncrementAnswerCount()
+	total := room.ParticipantCount()
+
+	if msg, err2 := ws.NewEnvelope(ws.MsgTypeAnswerAccepted, ws.AnswerAcceptedData{
+		QuestionID: data.QuestionID,
+		Score:      0,
+	}); err2 == nil {
+		room.SendToClient(c, msg)
+	}
+
+	if msg, err2 := ws.NewEnvelope(ws.MsgTypeAnswerCount, ws.AnswerCountData{
+		Answered: count,
+		Total:    total,
+	}); err2 == nil {
+		room.SendToOrganizer(msg)
+	}
+
+	slog.Debug("text answer submitted", "participant_id", *participantID, "question_id", data.QuestionID, "answered", count, "total", total)
+}
+
+// computeIsCorrect evaluates whether the given raw answer is correct for the question.
+// Returns nil for question types that have no correct/incorrect concept.
+func computeIsCorrect(q *model.Question, rawAnswer json.RawMessage) *bool {
+	trueVal := true
+	falseVal := false
+
+	switch q.Type {
+	case "single_choice", "image_choice":
+		var idx int
+		if err := json.Unmarshal(rawAnswer, &idx); err != nil {
+			return &falseVal
+		}
+		if idx < 0 || idx >= len(q.Options) {
+			return &falseVal
+		}
+		if q.Options[idx].IsCorrect {
+			return &trueVal
+		}
+		return &falseVal
+
+	case "multiple_choice":
+		var indices []int
+		if err := json.Unmarshal(rawAnswer, &indices); err != nil {
+			return &falseVal
+		}
+		selected := make(map[int]bool, len(indices))
+		for _, i := range indices {
+			selected[i] = true
+		}
+		for i, opt := range q.Options {
+			if opt.IsCorrect && !selected[i] {
+				return &falseVal
+			}
+			if !opt.IsCorrect && selected[i] {
+				return &falseVal
+			}
+		}
+		return &trueVal
+
+	default:
+		// open_text, word_cloud, brainstorm — no correct/incorrect
+		return nil
+	}
 }
 
 // sendError sends an error envelope to the given client via the room.
