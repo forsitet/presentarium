@@ -1,28 +1,32 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
+
+	"presentarium/internal/config"
+	"presentarium/internal/handler"
 )
 
 func main() {
-	port := os.Getenv("SERVER_PORT")
-	if port == "" {
-		port = "8080"
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	slog.SetDefault(logger)
+
+	cfg, err := config.Load()
+	if err != nil {
+		slog.Error("failed to load config", "error", err)
+		os.Exit(1)
 	}
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
-	})
+	router := handler.NewRouter()
 
-	addr := fmt.Sprintf(":%s", port)
-	log.Printf("Server starting on %s", addr)
-	if err := http.ListenAndServe(addr, mux); err != nil {
-		log.Fatalf("Server failed: %v", err)
+	addr := fmt.Sprintf("%s:%s", cfg.ServerHost, cfg.ServerPort)
+	slog.Info("server starting", "addr", addr)
+
+	if err := http.ListenAndServe(addr, router); err != nil {
+		slog.Error("server failed", "error", err)
+		os.Exit(1)
 	}
 }
