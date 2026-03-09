@@ -232,6 +232,35 @@
 
 ---
 
+### 2026-03-09 19:00 — TASK-014: Backend: подключение участников через WebSocket с переподключением
+**Что сделано:**
+- internal/repository/participant_repo.go: ParticipantRepository interface + PostgresImpl (Create, GetBySessionToken, ListBySession, UpdateLastSeen). GetBySessionToken используется для reconnect-логики.
+- internal/service/participant_service.go: ParticipantService interface + participantService (OnJoin, OnLeave, ListParticipants). OnJoin: проверяет session_token для reconnect → если найден в БД для той же сессии — восстанавливает участника; иначе создаёт нового. Отправляет {type:'connected', data:{session_token, role}} клиенту. Уведомляет организатора {type:'participant_joined'}. OnLeave: обновляет last_seen, уведомляет организатора {type:'participant_left'}.
+- internal/handler/participant_handler.go: GET /api/rooms/{code}/participants → список участников (id, name, joined_at, total_score).
+- internal/ws/client.go: добавлен метод TrySend() для не-блокирующей отправки сообщения клиенту.
+- internal/handler/routes.go: добавлен ParticipantService в RouterDeps; WS join/leave hooks подключены к participantSvc; зарегистрирован GET /api/rooms/{code}/participants.
+- cmd/server/main.go: инициализация participantRepo + participantSvc, передача в RouterDeps.
+
+**Маршруты:**
+- GET /api/rooms/{code}/participants (JWT required)
+- WS join/leave → автоматически через hooks из participantSvc
+
+**Изменённые файлы:**
+- backend/internal/repository/participant_repo.go (новый)
+- backend/internal/service/participant_service.go (новый)
+- backend/internal/handler/participant_handler.go (новый)
+- backend/internal/ws/client.go (добавлен TrySend)
+- backend/internal/handler/routes.go (обновлён)
+- backend/cmd/server/main.go (обновлён)
+- tasks.json (TASK-014 status → done)
+
+**Статус:** done
+
+**Следующие доступные задачи:**
+- TASK-017 (critical): Backend: проведение опроса — показ вопроса и серверный таймер (deps: TASK-013 ✓)
+
+---
+
 <!-- Агенты записывают сюда свои summary по формату:
 ### YYYY-MM-DD HH:MM — TASK-XXX: [название задачи]
 **Что сделано:** ...

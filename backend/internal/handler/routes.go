@@ -19,6 +19,7 @@ type RouterDeps struct {
 	PollService         service.PollService
 	QuestionService     service.QuestionService
 	RoomService         service.RoomService
+	ParticipantService  service.ParticipantService
 	WSHandler           *ws.Handler
 	JWTSecret           string
 	RefreshTokenTTLDays int
@@ -34,6 +35,14 @@ func NewRouter(deps RouterDeps) http.Handler {
 
 	r.Get("/health", healthHandler)
 
+	// Wire WS join/leave hooks so the participant service manages DB records.
+	if deps.WSHandler != nil && deps.ParticipantService != nil {
+		deps.WSHandler.SetJoinLeaveHandlers(
+			deps.ParticipantService.OnJoin,
+			deps.ParticipantService.OnLeave,
+		)
+	}
+
 	// WebSocket endpoint (no JWT middleware — auth is handled inside the WS handler).
 	if deps.WSHandler != nil {
 		r.Get("/ws/room/{code}", deps.WSHandler.HandleRoom)
@@ -46,6 +55,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 	pollH := newPollHandler(deps.PollService)
 	questionH := newQuestionHandler(deps.QuestionService)
 	roomH := newRoomHandler(deps.RoomService)
+	participantH := newParticipantHandler(deps.ParticipantService)
 
 	r.Route("/api", func(r chi.Router) {
 		r.Route("/auth", func(r chi.Router) {
@@ -87,6 +97,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 				r.Post("/", roomH.handleCreate)
 				r.Get("/{code}", roomH.handleGet)
 				r.Patch("/{code}/state", roomH.handleChangeState)
+				r.Get("/{code}/participants", participantH.handleList)
 			})
 		})
 	})
