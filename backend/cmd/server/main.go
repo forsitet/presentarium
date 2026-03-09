@@ -6,8 +6,13 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/jmoiron/sqlx"
+	_ "github.com/lib/pq"
+
 	"presentarium/internal/config"
 	"presentarium/internal/handler"
+	"presentarium/internal/repository"
+	"presentarium/internal/service"
 )
 
 func main() {
@@ -20,7 +25,27 @@ func main() {
 		os.Exit(1)
 	}
 
-	router := handler.NewRouter()
+	db, err := sqlx.Connect("postgres", cfg.DSN())
+	if err != nil {
+		slog.Error("failed to connect to database", "error", err)
+		os.Exit(1)
+	}
+	defer db.Close()
+	slog.Info("connected to database")
+
+	userRepo := repository.NewPostgresUserRepo(db)
+	authSvc := service.NewAuthService(
+		userRepo,
+		cfg.JWTSecret,
+		cfg.JWTAccessTokenTTL,
+		cfg.JWTRefreshTokenTTL,
+	)
+
+	router := handler.NewRouter(handler.RouterDeps{
+		AuthService:         authSvc,
+		JWTSecret:           cfg.JWTSecret,
+		RefreshTokenTTLDays: cfg.JWTRefreshTokenTTL,
+	})
 
 	addr := fmt.Sprintf("%s:%s", cfg.ServerHost, cfg.ServerPort)
 	slog.Info("server starting", "addr", addr)
