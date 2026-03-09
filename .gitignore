@@ -1,0 +1,24 @@
+# Environment
+.env
+!.env.example
+
+# Backend
+backend/server
+backend/uploads/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.env.local
+
+# Docker
+docker-compose.override.yml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
