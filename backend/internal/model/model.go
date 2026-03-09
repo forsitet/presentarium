@@ -1,10 +1,50 @@
 package model
 
 import (
+	"database/sql/driver"
+	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
 )
+
+// QuestionOption represents a single answer option for a question.
+type QuestionOption struct {
+	Text      string `json:"text"`
+	IsCorrect bool   `json:"is_correct"`
+	ImageURL  string `json:"image_url,omitempty"`
+}
+
+// OptionList is a slice of QuestionOption that can be stored as JSONB in PostgreSQL.
+type OptionList []QuestionOption
+
+// Value implements driver.Valuer for SQL serialization.
+func (o OptionList) Value() (driver.Value, error) {
+	if o == nil {
+		return nil, nil
+	}
+	b, err := json.Marshal(o)
+	return string(b), err
+}
+
+// Scan implements sql.Scanner for SQL deserialization.
+func (o *OptionList) Scan(src interface{}) error {
+	if src == nil {
+		*o = nil
+		return nil
+	}
+	var b []byte
+	switch v := src.(type) {
+	case []byte:
+		b = v
+	case string:
+		b = []byte(v)
+	default:
+		return fmt.Errorf("OptionList.Scan: unsupported type %T", src)
+	}
+	return json.Unmarshal(b, o)
+}
 
 // User represents an organizer account.
 type User struct {
@@ -30,16 +70,16 @@ type Poll struct {
 
 // Question represents a question inside a poll.
 type Question struct {
-	ID               uuid.UUID   `db:"id"`
-	PollID           uuid.UUID   `db:"poll_id"`
-	Type             string      `db:"type"` // single_choice | multiple_choice | open_text | image_choice | word_cloud | brainstorm
-	Text             string      `db:"text"`
-	Options          interface{} `db:"options"` // JSONB
-	TimeLimitSeconds int         `db:"time_limit_seconds"`
-	Points           int         `db:"points"`
-	Position         int         `db:"position"`
-	CreatedAt        time.Time   `db:"created_at"`
-	UpdatedAt        time.Time   `db:"updated_at"`
+	ID               uuid.UUID  `db:"id"`
+	PollID           uuid.UUID  `db:"poll_id"`
+	Type             string     `db:"type"` // single_choice | multiple_choice | open_text | image_choice | word_cloud | brainstorm
+	Text             string     `db:"text"`
+	Options          OptionList `db:"options"` // JSONB
+	TimeLimitSeconds int        `db:"time_limit_seconds"`
+	Points           int        `db:"points"`
+	Position         int        `db:"position"`
+	CreatedAt        time.Time  `db:"created_at"`
+	UpdatedAt        time.Time  `db:"updated_at"`
 }
 
 // Session represents a live quiz session (room).
