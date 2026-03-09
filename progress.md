@@ -3,9 +3,9 @@
 ## Статус проекта
 
 **Всего задач:** 46
-**Выполнено:** 3
+**Выполнено:** 7
 **В работе:** 0
-**Ожидает:** 43
+**Ожидает:** 39
 
 ## Сессии работы агентов
 
@@ -175,6 +175,32 @@
 **Следующие доступные critical задачи:**
 - TASK-012 (WebSocket Hub, deps: TASK-003 ✓)
 - TASK-004 (Frontend React init, deps: TASK-001 ✓)
+
+---
+
+### 2026-03-09 11:00 — TASK-012: Backend WebSocket Hub — управление комнатами и соединениями
+**Что сделано:**
+- internal/ws/messages.go: все типизированные структуры для входящих и исходящих WS-сообщений: 17 outgoing типов (connected, participant_joined/left, question_start, timer_tick, question_end, results, leaderboard, answer_accepted, answer_count, wordcloud_update, brainstorm_*, session_end, answer_hidden, error) и 9 incoming типов. NewEnvelope() для сериализации.
+- internal/ws/room.go: Room с RWMutex, хранит map[*Client]bool, текущее состояние (RoomState: waiting/active/showing_question/showing_results/finished), ActiveQuestion, stopTimer channel. Методы: AddClient, RemoveClient, Broadcast, BroadcastToParticipants, SendToOrganizer, SendToClient, State/SetState, SetCurrentQuestion, SetStopTimer/StopCurrentTimer.
+- internal/ws/hub.go: Hub с map[roomCode]*Room + RWMutex. Методы: CreateRoom, GetRoom, RemoveRoom, Register, Unregister (авто-cleanup finished пустых комнат), Broadcast.
+- internal/ws/client.go: Client с readPump (SetReadLimit=4KB, pong handler, rate limiting 10 msg/sec per IP) и writePump (ping каждые 30 сек). Геттеры/сеттеры для role, name, sessionToken, participantID, userID.
+- internal/ws/handler.go: WS HTTP upgrade endpoint HandleRoom. Определяет роль по JWT (Authorization header или ?token=). Participant: session_token из query param или генерирует новый UUID. Dispatch incoming messages с авторизационными проверками. Hooks onJoin/onLeave/onMessage для интеграции с conduct service (TASK-017).
+- internal/handler/routes.go: добавлен WSHandler *ws.Handler в RouterDeps, зарегистрирован GET /ws/room/{code}.
+- cmd/server/main.go: создание Hub + WSHandler, передача в RouterDeps.
+
+**Изменённые файлы:**
+- backend/internal/ws/messages.go (новый)
+- backend/internal/ws/room.go (новый)
+- backend/internal/ws/hub.go (обновлён — полная реализация)
+- backend/internal/ws/client.go (новый)
+- backend/internal/ws/handler.go (новый)
+- backend/internal/handler/routes.go (обновлён)
+- backend/cmd/server/main.go (обновлён)
+- tasks.json (TASK-012 status → done)
+
+**ВАЖНО для следующей итерации:** перед `go build` выполни `go mod tidy` в backend/. Следующая доступная critical задача: TASK-013 (Backend: создание и управление сессиями, deps: TASK-012 ✓ + TASK-007 ✓).
+
+**Статус:** done
 
 ---
 
