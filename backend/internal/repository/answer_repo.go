@@ -97,10 +97,16 @@ func (r *postgresAnswerRepo) ListByQuestion(ctx context.Context, questionID, ses
 
 func (r *postgresAnswerRepo) GetLeaderboard(ctx context.Context, sessionID uuid.UUID) ([]LeaderboardRow, error) {
 	var rows []LeaderboardRow
+	// Tiebreaker: participants who answered faster (lower sum of response_time_ms) rank higher.
+	// COALESCE with a large sentinel places non-answering participants last.
 	err := r.db.SelectContext(ctx, &rows,
-		`SELECT id, name, total_score
-		 FROM participants WHERE session_id=$1
-		 ORDER BY total_score DESC, joined_at ASC
+		`SELECT p.id, p.name, p.total_score
+		 FROM participants p
+		 LEFT JOIN answers a ON a.participant_id = p.id AND a.session_id = $1
+		 WHERE p.session_id = $1
+		 GROUP BY p.id, p.name, p.total_score
+		 ORDER BY p.total_score DESC,
+		          COALESCE(SUM(a.response_time_ms), 2147483647) ASC
 		 LIMIT 10`,
 		sessionID)
 	if err != nil {

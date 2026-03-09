@@ -14,6 +14,7 @@ import (
 	"presentarium/internal/model"
 	"presentarium/internal/repository"
 	"presentarium/internal/ws"
+	"presentarium/pkg/scoring"
 )
 
 // ConductService orchestrates live quiz sessions: showing questions, managing
@@ -24,6 +25,9 @@ type ConductService interface {
 	// EndQuestion ends the current question early for the given room.
 	// Called from the HTTP handler (PATCH /api/rooms/:code/state {action:"end_question"}).
 	EndQuestion(ctx context.Context, userID uuid.UUID, roomCode string) error
+	// EndSession ends the session, broadcasts session_end with the final leaderboard,
+	// and updates the session status to "finished" in the database.
+	EndSession(ctx context.Context, userID uuid.UUID, roomCode string) error
 }
 
 type conductService struct {
@@ -96,6 +100,80 @@ func (s *conductService) EndQuestion(ctx context.Context, userID uuid.UUID, room
 	return nil
 }
 
+// EndSession ends the session: verifies ownership, updates DB status to "finished",
+// broadcasts session_end with the final leaderboard, and removes the room from the Hub.
+func (s *conductService) EndSession(ctx context.Context, userID uuid.UUID, roomCode string) error {
+	session, err := s.sessionRepo.GetByCode(ctx, roomCode)
+	if err != nil {
+		return err
+	}
+
+	poll, err := s.pollRepo.GetByID(ctx, session.PollID)
+	if err != nil {
+		return err
+	}
+	if poll.UserID != userID {
+		return errs.ErrForbidden
+	}
+
+	room := s.hub.GetRoom(roomCode)
+
+	// Stop any running question timer before ending.
+	if room != nil {
+		room.StopCurrentTimer()
+	}
+
+	// Persist the finished status.
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if err := s.sessionRepo.UpdateStatus(ctx, session.ID, "finished", nil, &now); err != nil {
+		return err
+	}
+
+	if room == nil {
+		return nil
+	}
+
+	room.SetState(ws.StateFinished)
+
+	// Build final leaderboard (top 10).
+	lbRows, _ := s.answerRepo.GetLeaderboard(ctx, session.ID)
+	rankings := make([]ws.LeaderboardEntry, 0, len(lbRows))
+	rankMap := make(map[uuid.UUID]int, len(lbRows))
+	scoreMap := make(map[uuid.UUID]int, len(lbRows))
+	for i, row := range lbRows {
+		rank := i + 1
+		rankMap[row.ParticipantID] = rank
+		scoreMap[row.ParticipantID] = row.TotalScore
+		rankings = append(rankings, ws.LeaderboardEntry{
+			Rank:  rank,
+			ID:    row.ParticipantID,
+			Name:  row.Name,
+			Score: row.TotalScore,
+		})
+	}
+
+	// Broadcast session_end to the organizer (no personal data).
+	if msg, err := ws.NewEnvelope(ws.MsgTypeSessionEnd, ws.SessionEndData{Rankings: rankings}); err == nil {
+		room.SendToOrganizer(msg)
+	}
+
+	// Send personalised session_end to each participant.
+	room.ForEachParticipant(func(c *ws.Client) {
+		pid := c.ParticipantID()
+		data := ws.SessionEndData{Rankings: rankings}
+		if pid != nil {
+			data.MyRank = rankMap[*pid]
+			data.MyScore = scoreMap[*pid]
+		}
+		if msg, err := ws.NewEnvelope(ws.MsgTypeSessionEnd, data); err == nil {
+			room.SendToClient(c, msg)
+		}
+	})
+
+	slog.Info("session ended", "room_code", roomCode, "session_id", session.ID)
+	return nil
+}
+
 // handleShowQuestion processes the organizer's show_question WS message.
 func (s *conductService) handleShowQuestion(c *ws.Client, room *ws.Room, env ws.Envelope) {
 	var data ws.ShowQuestionData
@@ -124,6 +202,13 @@ func (s *conductService) handleShowQuestion(c *ws.Client, room *ws.Room, env ws.
 		return
 	}
 
+	// Load poll to get the scoring rule.
+	poll, err := s.pollRepo.GetByID(ctx, session.PollID)
+	if err != nil {
+		sendError(room, c, "poll not found")
+		return
+	}
+
 	// Count total questions in the poll for the position display.
 	allQuestions, err := s.questionRepo.ListByPoll(ctx, session.PollID)
 	if err != nil {
@@ -134,11 +219,13 @@ func (s *conductService) handleShowQuestion(c *ws.Client, room *ws.Room, env ws.
 	// Stop any existing timer (in case organizer skips a question).
 	room.StopCurrentTimer()
 
-	// Record the active question in the room.
+	// Record the active question in the room with scoring metadata.
 	activeQ := &ws.ActiveQuestion{
 		ID:           q.ID,
 		TimeLimitSec: q.TimeLimitSeconds,
 		StartedAt:    time.Now().Unix(),
+		ScoringRule:  poll.ScoringRule,
+		Points:       q.Points,
 	}
 	room.SetCurrentQuestion(activeQ)
 	room.SetState(ws.StateShowingQuestion)
@@ -258,22 +345,46 @@ func (s *conductService) finishQuestion(room *ws.Room, questionID, sessionID uui
 		room.Broadcast(msg)
 	}
 
-	// Compute leaderboard.
+	// Compute leaderboard — top 5 after the question.
 	lbRows, _ := s.answerRepo.GetLeaderboard(ctx, sessionID)
-	rankings := make([]ws.LeaderboardEntry, 0, len(lbRows))
+	const top = 5
+	top5 := make([]ws.LeaderboardEntry, 0, top)
+	rankMap := make(map[uuid.UUID]int, len(lbRows))
+	scoreMap := make(map[uuid.UUID]int, len(lbRows))
 	for i, row := range lbRows {
-		rankings = append(rankings, ws.LeaderboardEntry{
-			Rank:  i + 1,
-			ID:    row.ParticipantID,
-			Name:  row.Name,
-			Score: row.TotalScore,
-		})
+		rank := i + 1
+		rankMap[row.ParticipantID] = rank
+		scoreMap[row.ParticipantID] = row.TotalScore
+		if i < top {
+			top5 = append(top5, ws.LeaderboardEntry{
+				Rank:  rank,
+				ID:    row.ParticipantID,
+				Name:  row.Name,
+				Score: row.TotalScore,
+			})
+		}
 	}
 
-	lbData := ws.LeaderboardData{Rankings: rankings}
-	if msg, err := ws.NewEnvelope(ws.MsgTypeLeaderboard, lbData); err == nil {
-		room.Broadcast(msg)
+	// Send the leaderboard to the organizer (no personal data).
+	if msg, err := ws.NewEnvelope(ws.MsgTypeLeaderboard, ws.LeaderboardData{Rankings: top5}); err == nil {
+		room.SendToOrganizer(msg)
 	}
+
+	// Send a personalised leaderboard to each participant.
+	room.ForEachParticipant(func(c *ws.Client) {
+		pid := c.ParticipantID()
+		if pid == nil {
+			return
+		}
+		data := ws.LeaderboardData{
+			Rankings: top5,
+			MyRank:   rankMap[*pid],
+			MyScore:  scoreMap[*pid],
+		}
+		if msg, err := ws.NewEnvelope(ws.MsgTypeLeaderboard, data); err == nil {
+			room.SendToClient(c, msg)
+		}
+	})
 
 	slog.Info("question finished", "question_id", questionID, "session_id", sessionID, "answers", len(answers))
 }
@@ -344,6 +455,7 @@ func (s *conductService) handleSubmitAnswer(c *ws.Client, room *ws.Room, env ws.
 
 	isCorrect := computeIsCorrect(q, data.Answer)
 	responseTimeMs := int(time.Since(time.Unix(current.StartedAt, 0)).Milliseconds())
+	earnedScore := scoring.CalculateScore(current.Points, current.TimeLimitSec, responseTimeMs, current.ScoringRule, isCorrect)
 
 	answer := &model.Answer{
 		ID:             uuid.New(),
@@ -352,7 +464,7 @@ func (s *conductService) handleSubmitAnswer(c *ws.Client, room *ws.Room, env ws.
 		SessionID:      room.SessionID(),
 		Answer:         json.RawMessage(data.Answer),
 		IsCorrect:      isCorrect,
-		Score:          0, // Scoring computed in TASK-019
+		Score:          earnedScore,
 		ResponseTimeMs: responseTimeMs,
 		IsHidden:       false,
 		AnsweredAt:     time.Now(),
@@ -363,12 +475,17 @@ func (s *conductService) handleSubmitAnswer(c *ws.Client, room *ws.Room, env ws.
 		return
 	}
 
+	if earnedScore > 0 {
+		_ = s.answerRepo.UpdateParticipantScore(ctx, *participantID, earnedScore)
+	}
+
 	count := room.IncrementAnswerCount()
 	total := room.ParticipantCount()
 
 	if msg, err2 := ws.NewEnvelope(ws.MsgTypeAnswerAccepted, ws.AnswerAcceptedData{
 		QuestionID: data.QuestionID,
-		Score:      0,
+		Score:      earnedScore,
+		IsCorrect:  isCorrect,
 	}); err2 == nil {
 		room.SendToClient(c, msg)
 	}
@@ -380,7 +497,7 @@ func (s *conductService) handleSubmitAnswer(c *ws.Client, room *ws.Room, env ws.
 		room.SendToOrganizer(msg)
 	}
 
-	slog.Debug("answer submitted", "participant_id", *participantID, "question_id", data.QuestionID, "answered", count, "total", total)
+	slog.Debug("answer submitted", "participant_id", *participantID, "question_id", data.QuestionID, "score", earnedScore, "answered", count, "total", total)
 }
 
 // handleSubmitText processes a participant's text answer (open_text, word_cloud).
