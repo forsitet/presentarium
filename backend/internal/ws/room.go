@@ -29,7 +29,9 @@ const (
 type ActiveQuestion struct {
 	ID           uuid.UUID
 	TimeLimitSec int
-	StartedAt    int64 // Unix timestamp when the question was shown
+	StartedAt    int64  // Unix timestamp when the question was shown
+	ScoringRule  string // poll-level rule: none | correct_answer | speed_bonus
+	Points       int    // question base points
 }
 
 // Room represents a live session room managed by the Hub.
@@ -244,4 +246,17 @@ func (r *Room) AnswerCount() int {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.answerCount
+}
+
+// ForEachParticipant calls fn for every connected participant client.
+// The room mutex is held for reading during iteration, so fn must not
+// acquire the same mutex.
+func (r *Room) ForEachParticipant(fn func(*Client)) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for c := range r.clients {
+		if c.role == RoleParticipant {
+			fn(c)
+		}
+	}
 }
