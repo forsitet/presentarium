@@ -85,7 +85,7 @@ export function DashboardPage() {
     setLaunching(id)
     try {
       const { room_code } = await createRoom(id)
-      navigate(`/host/${room_code}`)
+      navigate(`/host/${room_code}`, { state: { pollId: id } })
     } catch (err: unknown) {
       const axiosErr = err as { response?: { status: number } }
       if (axiosErr?.response?.status === 409) {
