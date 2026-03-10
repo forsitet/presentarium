@@ -28,6 +28,7 @@ const (
 // ActiveQuestion holds runtime state for the currently displayed question.
 type ActiveQuestion struct {
 	ID           uuid.UUID
+	Type         string // question type: single_choice, multiple_choice, open_text, word_cloud, etc.
 	TimeLimitSec int
 	StartedAt    int64  // Unix timestamp when the question was shown
 	ScoringRule  string // poll-level rule: none | correct_answer | speed_bonus
@@ -44,7 +45,8 @@ type Room struct {
 	organizer       *Client
 	currentQuestion *ActiveQuestion
 	stopTimer       chan struct{}
-	answerCount     int // number of answers received for the current question
+	answerCount     int            // number of answers received for the current question
+	wordCloudFreq   map[string]int // per-question word frequency for word_cloud questions
 }
 
 // newRoom creates a new Room in the waiting state.
@@ -231,6 +233,60 @@ func (r *Room) ResetAnswerCount() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.answerCount = 0
+	r.wordCloudFreq = nil
+}
+
+// AddWordCloudWords increments the frequency count for each word in the word cloud.
+func (r *Room) AddWordCloudWords(words []string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.wordCloudFreq == nil {
+		r.wordCloudFreq = make(map[string]int)
+	}
+	for _, w := range words {
+		if w != "" {
+			r.wordCloudFreq[w]++
+		}
+	}
+}
+
+// WordCloudTopWords returns the top N words by frequency as a slice of (text, count) pairs.
+// Words are sorted by frequency descending. If n <= 0, all words are returned.
+func (r *Room) WordCloudTopWords(n int) []WordcloudWord {
+	r.mu.RLock()
+	freq := r.wordCloudFreq
+	r.mu.RUnlock()
+
+	if len(freq) == 0 {
+		return []WordcloudWord{}
+	}
+
+	words := make([]WordcloudWord, 0, len(freq))
+	for text, count := range freq {
+		words = append(words, WordcloudWord{Text: text, Count: count})
+	}
+
+	// Sort by count descending, then alphabetically for stability.
+	sortWordcloudWords(words)
+
+	if n > 0 && n < len(words) {
+		words = words[:n]
+	}
+	return words
+}
+
+// sortWordcloudWords sorts words by count descending, then text ascending.
+func sortWordcloudWords(words []WordcloudWord) {
+	// Simple insertion sort — N is at most 100 for word clouds.
+	for i := 1; i < len(words); i++ {
+		key := words[i]
+		j := i - 1
+		for j >= 0 && (words[j].Count < key.Count || (words[j].Count == key.Count && words[j].Text > key.Text)) {
+			words[j+1] = words[j]
+			j--
+		}
+		words[j+1] = key
+	}
 }
 
 // IncrementAnswerCount atomically increments and returns the new answer count.

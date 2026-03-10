@@ -14,6 +14,7 @@ import (
 	"presentarium/internal/repository"
 	"presentarium/internal/service"
 	"presentarium/internal/ws"
+	"presentarium/pkg/badwords"
 )
 
 func main() {
@@ -24,6 +25,13 @@ func main() {
 	if err != nil {
 		slog.Error("failed to load config", "error", err)
 		os.Exit(1)
+	}
+
+	// Load badwords dictionary (optional — log warning if file is missing).
+	if err := badwords.LoadFromFile("pkg/badwords/badwords.json"); err != nil {
+		slog.Warn("badwords dictionary not loaded", "error", err)
+	} else {
+		slog.Info("badwords dictionary loaded")
 	}
 
 	db, err := sqlx.Connect("postgres", cfg.DSN())
