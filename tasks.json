@@ -251,7 +251,7 @@
         "Шаг 5: добавить вопрос типа word_cloud → нет поля для вариантов ответа"
       ],
       "dependencies": ["TASK-008", "TASK-009"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-011",

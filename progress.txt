@@ -51,7 +51,39 @@
 - frontend/src/routes/index.tsx (added new routes)
 - tasks.json (TASK-009 status → done)
 
+---
+
+## TASK-010: Poll editor — DONE (2026-03-10)
+
+### What was done:
+- Extended `frontend/src/api/polls.ts` with 8 new functions: getPoll, createPoll, updatePoll, getQuestions, createQuestion, updateQuestion, deleteQuestion, reorderQuestions
+- Created `frontend/src/components/QuestionTypeSelector.tsx`: modal overlay with 2x3 grid of question type cards (all 6 types), Russian labels, Escape key support
+- Created `frontend/src/components/QuestionEditorPanel.tsx`:
+  - Common fields: text (textarea, max 500 chars), time_limit_seconds (5-300), points
+  - choice types (single/multiple/image): colored option bars, add/remove options, correct answer toggle (radio for single, checkbox for multiple), min 2 / max 6 options
+  - Non-choice types: informational message
+  - Auto-save on blur with "Сохранено" flash confirmation
+- Created `frontend/src/components/QuestionPreview.tsx`: dark-themed participant view, timer+points badges, colored option buttons for choice types, placeholder text for open types
+- Implemented full `frontend/src/pages/PollEditorPage.tsx`:
+  - Two-column desktop layout (question list + editor/preview), single-column mobile
+  - Poll settings form: title, description, scoring_rule, question_order — 500ms debounce auto-save
+  - Create-on-new flow: poll created when first save or first question added
+  - URL updates via window.history.replaceState after creation
+  - Question list with numbered cards, type badges, ↑/↓ reorder buttons
+  - Delete via ConfirmDialog
+  - Loading skeleton, error banner, empty states
+  - Save status indicator in sticky header
+
+### Files changed:
+- frontend/src/api/polls.ts (extended)
+- frontend/src/components/QuestionTypeSelector.tsx (new)
+- frontend/src/components/QuestionEditorPanel.tsx (new)
+- frontend/src/components/QuestionPreview.tsx (new)
+- frontend/src/pages/PollEditorPage.tsx (full implementation)
+- tasks.json (TASK-010 status → done)
+
 ### Notes for next iteration:
-- Next priority: TASK-010 (high) — Poll editor (depends on TASK-008 ✓, TASK-009 ✓)
-- TASK-010 needs: PollEditorPage with form, drag-and-drop question list, QuestionTypeSelector, QuestionEditorPanel
-- TASK-015 (HostSessionPage) also ready: depends on TASK-006 ✓, TASK-014 ✓
+- Next priority: TASK-015 (high) — Host waiting screen (depends on TASK-006 ✓, TASK-014 ✓)
+- TASK-015 needs: HostSessionPage in 'waiting' state, QR code, participant list via WebSocket, "Start" button
+- TASK-016 (JoinPage) depends on TASK-014 ✓ and TASK-015, also ready after TASK-015
+- TASK-035 (Backend middleware) is also high priority and fully ready (depends on TASK-005 ✓ only)
