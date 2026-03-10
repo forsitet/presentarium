@@ -68,6 +68,7 @@ func main() {
 		JWTSecret:           cfg.JWTSecret,
 		RefreshTokenTTLDays: cfg.JWTRefreshTokenTTL,
 		UploadsDir:          cfg.UploadsDir,
+		CORSAllowedOrigin:   cfg.CORSAllowedOrigin,
 	})
 
 	addr := fmt.Sprintf("%s:%s", cfg.ServerHost, cfg.ServerPort)
