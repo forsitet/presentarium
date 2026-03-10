@@ -2,6 +2,8 @@
 package badwords
 
 import (
+	"encoding/json"
+	"os"
 	"strings"
 	"sync"
 
@@ -21,6 +23,21 @@ func Load(words []string) {
 	for _, w := range words {
 		dictionary[normalize.Text(w)] = struct{}{}
 	}
+}
+
+// LoadFromFile reads a JSON array of words from the given file path and loads them.
+// Returns an error if the file cannot be read or parsed.
+func LoadFromFile(path string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	var words []string
+	if err := json.Unmarshal(data, &words); err != nil {
+		return err
+	}
+	Load(words)
+	return nil
 }
 
 // Filter checks text against the badwords dictionary.
