@@ -117,3 +117,32 @@
 - Next: TASK-016 (high) — JoinPage for participants (depends on TASK-014 ✓, TASK-015 ✓)
 - TASK-016 needs: code input, name input, WS connect as participant, session_token in localStorage, auto-reconnect, waiting screen after join
 - TASK-020 (HostSessionPage quiz state) and TASK-021 (participant quiz screen) become unblocked once TASK-016 is done
+
+---
+
+## TASK-011: Backend image upload — DONE (2025-11-20)
+
+### What was done:
+- Created `backend/internal/handler/upload_handler.go`:
+  - POST /api/upload/image: accepts multipart/form-data with field name "image"
+  - Enforces 5 MB limit via http.MaxBytesReader + explicit byte count check
+  - Detects MIME type from magic bytes (NOT from Content-Type header): JPEG (FF D8 FF), PNG (89 50 4E 47...), WebP (RIFF...WEBP)
+  - Rejects unsupported types with 415 Unsupported Media Type
+  - Saves file as {uuid}.{ext} in {uploadsDir}/images/ (creates dir if missing)
+  - Returns JSON: {"image_url": "/uploads/images/uuid.ext"}
+- Updated `backend/internal/handler/routes.go`:
+  - Added `UploadsDir string` field to `RouterDeps`
+  - Wired `uploadH.handleImage` to POST /api/upload/image (inside JWT-protected group)
+  - Added `/uploads/*` static file server at router level (public, no JWT needed for viewing)
+- Updated `backend/cmd/server/main.go`: passes `cfg.UploadsDir` to RouterDeps
+
+### Files changed:
+- backend/internal/handler/upload_handler.go (new)
+- backend/internal/handler/routes.go (UploadsDir field, upload route, static serving)
+- backend/cmd/server/main.go (pass UploadsDir)
+- tasks.json (TASK-011 status → done)
+
+### Notes for next iteration:
+- TASK-016 (high): JoinPage with auto-reconnect — all deps done
+- TASK-020 (high): HostSessionPage quiz state — all deps done
+- TASK-035 (high): Backend CORS/logging/rate-limit middleware — all deps done

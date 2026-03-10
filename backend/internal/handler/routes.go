@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"net/http"
+	"path/filepath"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -24,6 +25,7 @@ type RouterDeps struct {
 	WSHandler           *ws.Handler
 	JWTSecret           string
 	RefreshTokenTTLDays int
+	UploadsDir          string
 }
 
 // NewRouter creates and configures the HTTP router.
@@ -35,6 +37,10 @@ func NewRouter(deps RouterDeps) http.Handler {
 	r.Use(chimw.Recoverer)
 
 	r.Get("/health", healthHandler)
+
+	// Serve uploaded files (images) from the uploads directory.
+	uploadsAbsDir := filepath.Clean(deps.UploadsDir)
+	r.Handle("/uploads/*", http.StripPrefix("/uploads/", http.FileServer(http.Dir(uploadsAbsDir))))
 
 	// Wire WS join/leave hooks so the participant service manages DB records.
 	if deps.WSHandler != nil && deps.ParticipantService != nil {
@@ -62,6 +68,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 	questionH := newQuestionHandler(deps.QuestionService)
 	roomH := newRoomHandler(deps.RoomService, deps.ConductService)
 	participantH := newParticipantHandler(deps.ParticipantService)
+	uploadH := newUploadHandler(deps.UploadsDir)
 
 	r.Route("/api", func(r chi.Router) {
 		r.Route("/auth", func(r chi.Router) {
@@ -95,8 +102,10 @@ func NewRouter(deps RouterDeps) http.Handler {
 				})
 			})
 
-			// Upload routes (added in subsequent tasks)
-			r.Route("/upload", func(r chi.Router) {})
+			// Upload routes
+			r.Route("/upload", func(r chi.Router) {
+				r.Post("/image", uploadH.handleImage)
+			})
 
 			// Room routes
 			r.Route("/rooms", func(r chi.Router) {

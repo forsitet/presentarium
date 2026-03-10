@@ -274,7 +274,7 @@
         "Шаг 5: загрузить без авторизации → 401"
       ],
       "dependencies": ["TASK-005"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-012",
