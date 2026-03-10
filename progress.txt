@@ -250,3 +250,36 @@
 - Next high priorities: TASK-022 (word cloud backend), TASK-035 (CORS/logging middleware), TASK-024 (brainstorm backend)
 - TASK-034 (participant finish screens) is now unblocked — but FinalScreen is partially covered in TASK-021 already
 - TASK-033 (real-time stats for organizer) is also unblocked
+
+---
+
+## TASK-035: Backend middleware — CORS, logging, rate limiting — DONE (2026-03-11)
+
+### What was done:
+- Created `backend/internal/middleware/cors.go`:
+  - `CORS(allowedOrigin string)` middleware: sets Access-Control-Allow-Origin only for matching origin
+  - Handles preflight OPTIONS with 204 + required CORS headers
+  - Sets `Vary: Origin` header to avoid caching issues
+- Created `backend/internal/middleware/logging.go`:
+  - `Logger()` middleware: wraps ResponseWriter to capture status code
+  - Logs every request via `slog.Info`: method, path, status, duration_ms
+- Updated `backend/internal/handler/routes.go`:
+  - Added `CORSAllowedOrigin string` field to `RouterDeps`
+  - Wired `CORS` and `Logger` at the top of the middleware chain (before RequestID/RealIP/Recoverer)
+- Updated `backend/cmd/server/main.go`: passes `cfg.CORSAllowedOrigin` to RouterDeps
+
+### Existing middleware already in place (pre-existing):
+- Auth middleware: JWT extraction from Authorization header → user_id in context
+- Rate limit middleware: 5 req/min per IP on /api/auth/* routes
+
+### Files changed:
+- backend/internal/middleware/cors.go (new)
+- backend/internal/middleware/logging.go (new)
+- backend/internal/handler/routes.go (CORSAllowedOrigin field, CORS+Logger wiring)
+- backend/cmd/server/main.go (pass CORSAllowedOrigin)
+- tasks.json (TASK-035 status → done)
+
+### Notes for next iteration:
+- Next high priorities: TASK-022 (word cloud backend, all deps done), TASK-024 (brainstorm backend, all deps done)
+- TASK-036 (Nginx reverse proxy) — all deps done (TASK-002 ✓, TASK-004 ✓)
+- TASK-039 (unit tests) depends on TASK-022 and TASK-026

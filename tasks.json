@@ -825,7 +825,7 @@
         "Шаг 5: в логах каждый запрос записан с method, path, status, duration"
       ],
       "dependencies": ["TASK-005"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-036",

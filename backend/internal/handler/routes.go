@@ -26,12 +26,15 @@ type RouterDeps struct {
 	JWTSecret           string
 	RefreshTokenTTLDays int
 	UploadsDir          string
+	CORSAllowedOrigin   string
 }
 
 // NewRouter creates and configures the HTTP router.
 func NewRouter(deps RouterDeps) http.Handler {
 	r := chi.NewRouter()
 
+	r.Use(appmw.CORS(deps.CORSAllowedOrigin))
+	r.Use(appmw.Logger())
 	r.Use(chimw.RequestID)
 	r.Use(chimw.RealIP)
 	r.Use(chimw.Recoverer)
