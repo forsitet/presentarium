@@ -48,6 +48,7 @@ func main() {
 	sessionRepo := repository.NewPostgresSessionRepo(db)
 	participantRepo := repository.NewPostgresParticipantRepo(db)
 	answerRepo := repository.NewPostgresAnswerRepo(db)
+	brainstormRepo := repository.NewPostgresBrainstormRepo(db)
 
 	authSvc := service.NewAuthService(
 		userRepo,
@@ -63,7 +64,7 @@ func main() {
 
 	roomSvc := service.NewRoomService(sessionRepo, pollRepo, hub)
 	participantSvc := service.NewParticipantService(participantRepo, sessionRepo, hub)
-	conductSvc := service.NewConductService(questionRepo, sessionRepo, pollRepo, answerRepo, hub)
+	conductSvc := service.NewConductService(questionRepo, sessionRepo, pollRepo, answerRepo, brainstormRepo, hub)
 
 	router := handler.NewRouter(handler.RouterDeps{
 		AuthService:         authSvc,
