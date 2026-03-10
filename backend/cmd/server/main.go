@@ -67,6 +67,7 @@ func main() {
 		WSHandler:           wsHandler,
 		JWTSecret:           cfg.JWTSecret,
 		RefreshTokenTTLDays: cfg.JWTRefreshTokenTTL,
+		UploadsDir:          cfg.UploadsDir,
 	})
 
 	addr := fmt.Sprintf("%s:%s", cfg.ServerHost, cfg.ServerPort)
