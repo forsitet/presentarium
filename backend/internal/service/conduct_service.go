@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -14,6 +15,8 @@ import (
 	"presentarium/internal/model"
 	"presentarium/internal/repository"
 	"presentarium/internal/ws"
+	"presentarium/pkg/badwords"
+	"presentarium/pkg/normalize"
 	"presentarium/pkg/scoring"
 )
 
@@ -222,6 +225,7 @@ func (s *conductService) handleShowQuestion(c *ws.Client, room *ws.Room, env ws.
 	// Record the active question in the room with scoring metadata.
 	activeQ := &ws.ActiveQuestion{
 		ID:           q.ID,
+		Type:         q.Type,
 		TimeLimitSec: q.TimeLimitSeconds,
 		StartedAt:    time.Now().Unix(),
 		ScoringRule:  poll.ScoringRule,
@@ -542,7 +546,15 @@ func (s *conductService) handleSubmitText(c *ws.Client, room *ws.Room, env ws.En
 	}
 
 	responseTimeMs := int(time.Since(time.Unix(current.StartedAt, 0)).Milliseconds())
-	textJSON, _ := json.Marshal(data.Text)
+
+	// For word_cloud questions: normalize, filter, and store the processed text.
+	storedText := data.Text
+	if current.Type == "word_cloud" {
+		filtered, _ := badwords.Filter(data.Text)
+		storedText = filtered
+	}
+
+	textJSON, _ := json.Marshal(storedText)
 
 	answer := &model.Answer{
 		ID:             uuid.New(),
@@ -577,6 +589,18 @@ func (s *conductService) handleSubmitText(c *ws.Client, room *ws.Room, env ws.En
 		Total:    total,
 	}); err2 == nil {
 		room.SendToOrganizer(msg)
+	}
+
+	// For word_cloud questions: update in-memory frequency and broadcast to organizer.
+	if current.Type == "word_cloud" {
+		normalized := normalize.Text(storedText)
+		words := strings.Fields(normalized)
+		room.AddWordCloudWords(words)
+
+		topWords := room.WordCloudTopWords(100)
+		if msg, err2 := ws.NewEnvelope(ws.MsgTypeWordcloudUpdate, ws.WordcloudUpdateData{Words: topWords}); err2 == nil {
+			room.SendToOrganizer(msg)
+		}
 	}
 
 	slog.Debug("text answer submitted", "participant_id", *participantID, "question_id", data.QuestionID, "answered", count, "total", total)
