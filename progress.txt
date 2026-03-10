@@ -283,3 +283,40 @@
 - Next high priorities: TASK-022 (word cloud backend, all deps done), TASK-024 (brainstorm backend, all deps done)
 - TASK-036 (Nginx reverse proxy) — all deps done (TASK-002 ✓, TASK-004 ✓)
 - TASK-039 (unit tests) depends on TASK-022 and TASK-026
+
+---
+
+## TASK-022: Backend word cloud — normalization, aggregation, wordcloud_update — DONE (2025-11-25)
+
+### What was done:
+- `pkg/badwords/filter.go`: added `LoadFromFile(path string) error` — reads JSON array from disk and loads into dictionary
+- `pkg/badwords/badwords.json`: initial dictionary with 26 RU+EN profanity words
+- `pkg/normalize/text_test.go`: unit tests for `normalize.Text()` — trim, lowercase, punctuation removal, multi-case equality
+- `pkg/badwords/filter_test.go`: unit tests for `Filter()` — clean text, single bad word, english, case-insensitive, empty input
+- `internal/ws/room.go`:
+  - Added `Type string` field to `ActiveQuestion` (so question type is available without a DB call during answer processing)
+  - Added `wordCloudFreq map[string]int` to `Room` struct
+  - `ResetAnswerCount()` now also resets the word cloud freq map
+  - New methods: `AddWordCloudWords(words []string)`, `WordCloudTopWords(n int) []WordcloudWord` (top-N by freq, insertion sort)
+- `internal/service/conduct_service.go`:
+  - `handleShowQuestion()`: sets `activeQ.Type = q.Type`
+  - `handleSubmitText()`: if question type is `word_cloud`, filters text through `badwords.Filter()`, saves filtered text to DB, then normalizes and splits into words, updates room freq map, broadcasts `wordcloud_update` to organizer
+  - Added imports: `strings`, `presentarium/pkg/badwords`, `presentarium/pkg/normalize`
+- `cmd/server/main.go`: loads `pkg/badwords/badwords.json` on startup via `badwords.LoadFromFile()`
+
+### Files changed:
+- backend/pkg/badwords/filter.go (LoadFromFile added)
+- backend/pkg/badwords/badwords.json (new)
+- backend/pkg/normalize/text_test.go (new)
+- backend/pkg/badwords/filter_test.go (new)
+- backend/internal/ws/room.go (Type in ActiveQuestion, wordCloudFreq, AddWordCloudWords, WordCloudTopWords)
+- backend/internal/service/conduct_service.go (word cloud logic in handleSubmitText)
+- backend/cmd/server/main.go (load badwords on startup)
+- tasks.json (TASK-022 status → done)
+
+### Notes for next iteration:
+- TASK-023 (frontend word cloud) is now unblocked — needs WordCloudView.tsx with react-wordcloud, WordCloudInput.tsx
+- TASK-024 (brainstorm backend) is high priority, all deps done (TASK-018 ✓)
+- TASK-026 (badwords filter — full TASK-026 scope) — partial work done here, remaining: hot reload, TASK-026 moderation endpoint
+- TASK-036 (Nginx) — all deps done
+- TASK-039 (unit tests) — TASK-022 ✓ now, still needs TASK-026

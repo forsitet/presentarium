@@ -530,7 +530,7 @@
         "Шаг 5: отправить 101 уникальное слово → в wordcloud_update не более 100 слов (топ по частоте)"
       ],
       "dependencies": ["TASK-018"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-023",
