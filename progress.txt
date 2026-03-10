@@ -320,3 +320,39 @@
 - TASK-026 (badwords filter — full TASK-026 scope) — partial work done here, remaining: hot reload, TASK-026 moderation endpoint
 - TASK-036 (Nginx) — all deps done
 - TASK-039 (unit tests) — TASK-022 ✓ now, still needs TASK-026
+
+---
+
+## TASK-024: Backend brainstorm mode — DONE (2026-01-10)
+
+### What was done:
+- Created `backend/internal/repository/brainstorm_repo.go`:
+  - `BrainstormRepository` interface with 8 methods
+  - `CreateIdea`, `GetIdea`, `CountIdeasByParticipant`, `SetIdeaHidden`, `ListIdeasRanked`, `ListAllIdeas`
+  - `CreateVote` (returns ErrConflict on UNIQUE violation via pq.Error code 23505), `CountVotesByParticipant`
+  - DB trigger on `brainstorm_votes` keeps `brainstorm_ideas.votes_count` in sync
+- Extended `backend/internal/ws/room.go`:
+  - Added `brainstormPhase`, `brainstormIdeaCounts`, `brainstormVoteCounts` fields to Room struct
+  - Added `InitBrainstorm()`, `BrainstormPhase()`, `SetBrainstormPhase()`, `IncrementBrainstormIdeaCount()`, `BrainstormIdeaCount()`, `IncrementBrainstormVoteCount()`, `BrainstormVoteCount()` methods
+- Extended `backend/internal/service/conduct_service.go`:
+  - Added `brainstormRepo` field and updated `NewConductService` signature
+  - `handleShowQuestion`: calls `room.InitBrainstorm()` for brainstorm question type
+  - `HandleMessage`: routes `submit_idea`, `submit_vote`, `brainstorm_hide_idea`, `brainstorm_change_phase`
+  - `handleSubmitIdea`: validates collecting phase, 5-idea limit (in-memory), badwords filter, saves to DB, broadcasts `brainstorm_idea_added` to organizer + submitter
+  - `handleSubmitVote`: validates voting phase, checks own-idea prohibition, 3-vote limit (in-memory), UNIQUE check via ErrConflict, broadcasts `brainstorm_vote_updated` with updated `votes_count`
+  - `handleBrainstormHideIdea`: organizer toggles `is_hidden`, broadcasts `answer_hidden` to all
+  - `handleBrainstormChangePhase`: organizer advances phase (collecting→voting→results); on results, fetches ranked ideas from DB and broadcasts them with phase change
+- Updated `backend/cmd/server/main.go`: creates `brainstormRepo` and passes it to `NewConductService`
+
+### Files changed:
+- backend/internal/repository/brainstorm_repo.go (new)
+- backend/internal/ws/room.go (brainstorm state + 8 new methods)
+- backend/internal/service/conduct_service.go (brainstormRepo, 4 new handlers)
+- backend/cmd/server/main.go (wire brainstorm repo)
+- tasks.json (TASK-024 status → done)
+
+### Notes for next iteration:
+- TASK-025 (frontend brainstorm UI) is now unblocked — needs BrainstormInput.tsx, BrainstormBoard.tsx
+- TASK-023 (frontend word cloud) is also high priority — needs WordCloudView.tsx with react-wordcloud
+- TASK-026 (badwords filter hot reload) — remaining work: implement hot reload without server restart
+- TASK-036 (Nginx reverse proxy) — high priority, all deps done

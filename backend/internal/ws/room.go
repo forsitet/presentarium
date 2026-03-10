@@ -47,6 +47,11 @@ type Room struct {
 	stopTimer       chan struct{}
 	answerCount     int            // number of answers received for the current question
 	wordCloudFreq   map[string]int // per-question word frequency for word_cloud questions
+
+	// Brainstorm in-memory state (reset on each brainstorm question start).
+	brainstormPhase      string              // collecting | voting | results
+	brainstormIdeaCounts map[uuid.UUID]int   // participantID -> idea count
+	brainstormVoteCounts map[uuid.UUID]int   // participantID -> vote count
 }
 
 // newRoom creates a new Room in the waiting state.
@@ -234,6 +239,65 @@ func (r *Room) ResetAnswerCount() {
 	defer r.mu.Unlock()
 	r.answerCount = 0
 	r.wordCloudFreq = nil
+}
+
+// InitBrainstorm initialises in-memory state for a new brainstorm question.
+func (r *Room) InitBrainstorm() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.brainstormPhase = "collecting"
+	r.brainstormIdeaCounts = make(map[uuid.UUID]int)
+	r.brainstormVoteCounts = make(map[uuid.UUID]int)
+}
+
+// BrainstormPhase returns the current brainstorm phase.
+func (r *Room) BrainstormPhase() string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.brainstormPhase
+}
+
+// SetBrainstormPhase updates the brainstorm phase.
+func (r *Room) SetBrainstormPhase(phase string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.brainstormPhase = phase
+}
+
+// IncrementBrainstormIdeaCount increments the idea count for a participant and returns the new count.
+func (r *Room) IncrementBrainstormIdeaCount(participantID uuid.UUID) int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.brainstormIdeaCounts == nil {
+		r.brainstormIdeaCounts = make(map[uuid.UUID]int)
+	}
+	r.brainstormIdeaCounts[participantID]++
+	return r.brainstormIdeaCounts[participantID]
+}
+
+// BrainstormIdeaCount returns the current idea count for a participant.
+func (r *Room) BrainstormIdeaCount(participantID uuid.UUID) int {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.brainstormIdeaCounts[participantID]
+}
+
+// IncrementBrainstormVoteCount increments the vote count for a participant and returns the new count.
+func (r *Room) IncrementBrainstormVoteCount(participantID uuid.UUID) int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.brainstormVoteCounts == nil {
+		r.brainstormVoteCounts = make(map[uuid.UUID]int)
+	}
+	r.brainstormVoteCounts[participantID]++
+	return r.brainstormVoteCounts[participantID]
+}
+
+// BrainstormVoteCount returns the current vote count for a participant.
+func (r *Room) BrainstormVoteCount(participantID uuid.UUID) int {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.brainstormVoteCounts[participantID]
 }
 
 // AddWordCloudWords increments the frequency count for each word in the word cloud.

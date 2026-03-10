@@ -34,11 +34,12 @@ type ConductService interface {
 }
 
 type conductService struct {
-	questionRepo repository.QuestionRepository
-	sessionRepo  repository.SessionRepository
-	pollRepo     repository.PollRepository
-	answerRepo   repository.AnswerRepository
-	hub          *ws.Hub
+	questionRepo   repository.QuestionRepository
+	sessionRepo    repository.SessionRepository
+	pollRepo       repository.PollRepository
+	answerRepo     repository.AnswerRepository
+	brainstormRepo repository.BrainstormRepository
+	hub            *ws.Hub
 }
 
 // NewConductService creates a new ConductService.
@@ -47,14 +48,16 @@ func NewConductService(
 	sessionRepo repository.SessionRepository,
 	pollRepo repository.PollRepository,
 	answerRepo repository.AnswerRepository,
+	brainstormRepo repository.BrainstormRepository,
 	hub *ws.Hub,
 ) ConductService {
 	return &conductService{
-		questionRepo: questionRepo,
-		sessionRepo:  sessionRepo,
-		pollRepo:     pollRepo,
-		answerRepo:   answerRepo,
-		hub:          hub,
+		questionRepo:   questionRepo,
+		sessionRepo:    sessionRepo,
+		pollRepo:       pollRepo,
+		answerRepo:     answerRepo,
+		brainstormRepo: brainstormRepo,
+		hub:            hub,
 	}
 }
 
@@ -69,6 +72,14 @@ func (s *conductService) HandleMessage(c *ws.Client, room *ws.Room, env ws.Envel
 		s.handleSubmitAnswer(c, room, env)
 	case ws.MsgTypeSubmitText:
 		s.handleSubmitText(c, room, env)
+	case ws.MsgTypeSubmitIdea:
+		s.handleSubmitIdea(c, room, env)
+	case ws.MsgTypeSubmitVote:
+		s.handleSubmitVote(c, room, env)
+	case ws.MsgTypeBrainstormHideIdea:
+		s.handleBrainstormHideIdea(c, room, env)
+	case ws.MsgTypeBrainstormChangePhase:
+		s.handleBrainstormChangePhase(c, room, env)
 	}
 }
 
@@ -234,6 +245,9 @@ func (s *conductService) handleShowQuestion(c *ws.Client, room *ws.Room, env ws.
 	room.SetCurrentQuestion(activeQ)
 	room.SetState(ws.StateShowingQuestion)
 	room.ResetAnswerCount()
+	if q.Type == "brainstorm" {
+		room.InitBrainstorm()
+	}
 
 	// Build options payload hiding is_correct from participants.
 	optionsForParticipants, _ := buildParticipantOptions(q.Options)
@@ -648,6 +662,269 @@ func computeIsCorrect(q *model.Question, rawAnswer json.RawMessage) *bool {
 	default:
 		// open_text, word_cloud, brainstorm — no correct/incorrect
 		return nil
+	}
+}
+
+// handleSubmitIdea processes a participant's idea submission in brainstorm mode.
+func (s *conductService) handleSubmitIdea(c *ws.Client, room *ws.Room, env ws.Envelope) {
+	if c.Role() != ws.RoleParticipant {
+		sendError(room, c, "only participants can submit ideas")
+		return
+	}
+	participantID := c.ParticipantID()
+	if participantID == nil {
+		sendError(room, c, "participant not registered")
+		return
+	}
+
+	current := room.CurrentQuestion()
+	if current == nil || current.Type != "brainstorm" {
+		sendError(room, c, "no active brainstorm question")
+		return
+	}
+	if room.BrainstormPhase() != "collecting" {
+		sendError(room, c, "idea collection phase is over")
+		return
+	}
+
+	var data ws.SubmitIdeaData
+	if err := json.Unmarshal(env.Data, &data); err != nil {
+		sendError(room, c, "invalid submit_idea payload")
+		return
+	}
+	if len([]rune(data.Text)) > 300 {
+		sendError(room, c, "idea text exceeds 300 characters")
+		return
+	}
+
+	// Check per-participant idea limit (5 ideas max).
+	if room.BrainstormIdeaCount(*participantID) >= 5 {
+		sendError(room, c, "Достигнут лимит идей")
+		return
+	}
+
+	// Apply badwords filter.
+	filtered, _ := badwords.Filter(data.Text)
+
+	ctx := context.Background()
+	session, err := s.sessionRepo.GetByCode(ctx, room.Code())
+	if err != nil {
+		sendError(room, c, "session not found")
+		return
+	}
+
+	idea := &model.BrainstormIdea{
+		ID:            uuid.New(),
+		SessionID:     session.ID,
+		QuestionID:    current.ID,
+		ParticipantID: *participantID,
+		Text:          filtered,
+		IsHidden:      false,
+		VotesCount:    0,
+		CreatedAt:     time.Now(),
+	}
+
+	if err := s.brainstormRepo.CreateIdea(ctx, idea); err != nil {
+		sendError(room, c, "failed to save idea")
+		return
+	}
+
+	count := room.IncrementBrainstormIdeaCount(*participantID)
+	slog.Debug("brainstorm idea submitted", "participant_id", *participantID, "idea_id", idea.ID, "count", count)
+
+	// Broadcast new idea to organizer and notify the submitting participant.
+	ideaData := ws.BrainstormIdeaData{
+		ID:            idea.ID,
+		Text:          idea.Text,
+		ParticipantID: idea.ParticipantID,
+	}
+	if msg, err2 := ws.NewEnvelope(ws.MsgTypeBrainstormIdeaAdded, ideaData); err2 == nil {
+		room.SendToOrganizer(msg)
+		room.SendToClient(c, msg)
+	}
+}
+
+// handleSubmitVote processes a participant's vote for a brainstorm idea.
+func (s *conductService) handleSubmitVote(c *ws.Client, room *ws.Room, env ws.Envelope) {
+	if c.Role() != ws.RoleParticipant {
+		sendError(room, c, "only participants can vote")
+		return
+	}
+	participantID := c.ParticipantID()
+	if participantID == nil {
+		sendError(room, c, "participant not registered")
+		return
+	}
+
+	current := room.CurrentQuestion()
+	if current == nil || current.Type != "brainstorm" {
+		sendError(room, c, "no active brainstorm question")
+		return
+	}
+	if room.BrainstormPhase() != "voting" {
+		sendError(room, c, "not in voting phase")
+		return
+	}
+
+	var data ws.SubmitVoteData
+	if err := json.Unmarshal(env.Data, &data); err != nil {
+		sendError(room, c, "invalid submit_vote payload")
+		return
+	}
+
+	ctx := context.Background()
+
+	// Fetch the idea to validate ownership and existence.
+	idea, err := s.brainstormRepo.GetIdea(ctx, data.IdeaID)
+	if err != nil {
+		sendError(room, c, "idea not found")
+		return
+	}
+	if idea.IsHidden {
+		sendError(room, c, "cannot vote for hidden idea")
+		return
+	}
+	// Cannot vote for own idea.
+	if idea.ParticipantID == *participantID {
+		sendError(room, c, "cannot vote for your own idea")
+		return
+	}
+
+	// Check vote limit (3 votes per participant per question).
+	if room.BrainstormVoteCount(*participantID) >= 3 {
+		sendError(room, c, "vote limit reached (max 3)")
+		return
+	}
+
+	vote := &model.BrainstormVote{
+		ID:            uuid.New(),
+		IdeaID:        data.IdeaID,
+		ParticipantID: *participantID,
+		CreatedAt:     time.Now(),
+	}
+
+	if err := s.brainstormRepo.CreateVote(ctx, vote); err != nil {
+		if errors.Is(err, errs.ErrConflict) {
+			sendError(room, c, "already voted for this idea")
+			return
+		}
+		sendError(room, c, "failed to save vote")
+		return
+	}
+
+	room.IncrementBrainstormVoteCount(*participantID)
+
+	// Fetch updated votes count for the idea.
+	updatedIdea, err2 := s.brainstormRepo.GetIdea(ctx, data.IdeaID)
+	votesCount := 0
+	if err2 == nil {
+		votesCount = updatedIdea.VotesCount
+	}
+
+	slog.Debug("brainstorm vote submitted", "participant_id", *participantID, "idea_id", data.IdeaID, "session_id", room.SessionID())
+
+	// Broadcast updated vote count to all clients.
+	voteData := ws.BrainstormVoteData{
+		IdeaID:     data.IdeaID,
+		VotesCount: votesCount,
+	}
+	if msg, err3 := ws.NewEnvelope(ws.MsgTypeBrainstormVoteUpdated, voteData); err3 == nil {
+		room.Broadcast(msg)
+	}
+}
+
+// handleBrainstormHideIdea toggles visibility of a brainstorm idea (organizer only).
+func (s *conductService) handleBrainstormHideIdea(c *ws.Client, room *ws.Room, env ws.Envelope) {
+	if c.Role() != ws.RoleOrganizer {
+		sendError(room, c, "only the organizer can hide ideas")
+		return
+	}
+
+	var data ws.BrainstormHideIdeaData
+	if err := json.Unmarshal(env.Data, &data); err != nil {
+		sendError(room, c, "invalid brainstorm_hide_idea payload")
+		return
+	}
+
+	ctx := context.Background()
+	if err := s.brainstormRepo.SetIdeaHidden(ctx, data.IdeaID, data.IsHidden); err != nil {
+		sendError(room, c, "failed to update idea visibility")
+		return
+	}
+
+	// Notify all clients: participants will remove/add the idea from their list.
+	if msg, err := ws.NewEnvelope(ws.MsgTypeAnswerHidden, ws.BrainstormHideIdeaData{
+		IdeaID:   data.IdeaID,
+		IsHidden: data.IsHidden,
+	}); err == nil {
+		room.Broadcast(msg)
+	}
+}
+
+// handleBrainstormChangePhase advances the brainstorm phase (organizer only).
+func (s *conductService) handleBrainstormChangePhase(c *ws.Client, room *ws.Room, env ws.Envelope) {
+	if c.Role() != ws.RoleOrganizer {
+		sendError(room, c, "only the organizer can change brainstorm phase")
+		return
+	}
+
+	current := room.CurrentQuestion()
+	if current == nil || current.Type != "brainstorm" {
+		sendError(room, c, "no active brainstorm question")
+		return
+	}
+
+	var data ws.BrainstormChangePhaseData
+	if err := json.Unmarshal(env.Data, &data); err != nil {
+		sendError(room, c, "invalid brainstorm_change_phase payload")
+		return
+	}
+
+	// Validate allowed phases.
+	switch data.Phase {
+	case "collecting", "voting", "results":
+	default:
+		sendError(room, c, "invalid phase: must be collecting, voting, or results")
+		return
+	}
+
+	room.SetBrainstormPhase(data.Phase)
+	slog.Info("brainstorm phase changed", "room_code", room.Code(), "phase", data.Phase)
+
+	// If transitioning to results, fetch ranked ideas and broadcast.
+	if data.Phase == "results" {
+		ctx := context.Background()
+		session, err := s.sessionRepo.GetByCode(ctx, room.Code())
+		if err == nil {
+			ideas, err2 := s.brainstormRepo.ListIdeasRanked(ctx, session.ID, current.ID)
+			if err2 == nil {
+				// Build a ranked list payload to broadcast along with phase change.
+				type rankedIdea struct {
+					ID         uuid.UUID `json:"id"`
+					Text       string    `json:"text"`
+					VotesCount int       `json:"votes_count"`
+				}
+				ranked := make([]rankedIdea, len(ideas))
+				for i, idea := range ideas {
+					ranked[i] = rankedIdea{ID: idea.ID, Text: idea.Text, VotesCount: idea.VotesCount}
+				}
+
+				type phaseWithResults struct {
+					Phase  string       `json:"phase"`
+					Ideas  []rankedIdea `json:"ideas,omitempty"`
+				}
+				payload := phaseWithResults{Phase: data.Phase, Ideas: ranked}
+				if msg, err3 := ws.NewEnvelope(ws.MsgTypeBrainstormPhaseChanged, payload); err3 == nil {
+					room.Broadcast(msg)
+					return
+				}
+			}
+		}
+	}
+
+	phaseData := ws.BrainstormPhaseData{Phase: data.Phase}
+	if msg, err := ws.NewEnvelope(ws.MsgTypeBrainstormPhaseChanged, phaseData); err == nil {
+		room.Broadcast(msg)
 	}
 }
 
