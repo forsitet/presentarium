@@ -482,7 +482,7 @@
         "Шаг 6: кнопка «Завершить опрос» → все участники получают session_end"
       ],
       "dependencies": ["TASK-015", "TASK-017", "TASK-018"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-021",

@@ -179,3 +179,37 @@
 - Next: TASK-020 (high) — HostSessionPage quiz state (showing_question, results, leaderboard) — all deps done
 - TASK-021 (high) — ParticipantSessionPage question/answer UI — depends on TASK-016 ✓ and TASK-019 ✓
 - TASK-035 (high) — Backend CORS/logging/rate-limit middleware — depends on TASK-005 ✓
+
+---
+
+## TASK-020: HostSessionPage quiz states — DONE (2026-03-11)
+
+### What was done:
+- Created `frontend/src/components/AnswerBarChart.tsx`:
+  - Uses recharts (BarChart, Bar, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer)
+  - Props: options[], distribution (Record<string,number>), showCorrect flag
+  - Colors: neutral palette during question, green for correct / red for incorrect in results
+  - Truncates long option labels to 22 chars
+- Created `frontend/src/components/Leaderboard.tsx`:
+  - Shows top-N entries with rank, name, score
+  - Gold/silver/bronze colors for ranks 1/2/3
+  - Empty state handled gracefully
+- Implemented full `frontend/src/pages/HostSessionPage.tsx` quiz states:
+  - **active**: transition screen after start — shows first question preview, "Show first question" button
+  - **showing_question**: live question view — timer progress bar (green→yellow→red), answer counter, Kahoot-style option tiles, real-time AnswerBarChart, "End early" button
+  - **showing_results**: post-question view — AnswerBarChart with correct answers highlighted (green/red), option list with ✓/✗ markers, Leaderboard top-5, next question preview with "Show next" button
+  - **finished**: final screen with trophy, final Leaderboard, "Back to dashboard" button
+  - WS handlers: question_start, timer_tick, answer_count, question_end, results, leaderboard, session_end
+- Fixed `frontend/src/pages/DashboardPage.tsx`: passes `{ state: { pollId } }` in navigate() when launching a room so HostSessionPage can load questions
+
+### Files changed:
+- frontend/src/components/AnswerBarChart.tsx (new)
+- frontend/src/components/Leaderboard.tsx (new)
+- frontend/src/pages/HostSessionPage.tsx (full implementation — all quiz states)
+- frontend/src/pages/DashboardPage.tsx (pass pollId in navigation state)
+- tasks.json (TASK-020 status → done)
+
+### Notes for next iteration:
+- Next: TASK-021 (high) — ParticipantSessionPage question/answer screen — all deps done (TASK-016 ✓, TASK-019 ✓)
+- TASK-021 needs: question_start → show question+options+timer; answer submission; answer_accepted state; question_end → show correct/wrong + score + rank
+- TASK-035 (high) — Backend CORS/logging/rate-limit middleware — depends on TASK-005 ✓
