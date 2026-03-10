@@ -41,7 +41,42 @@ export const router = createBrowserRouter([
           return { Component: DashboardPage }
         },
       },
+      {
+        path: 'polls/new',
+        lazy: async () => {
+          const { PollEditorPage } = await import('../pages/PollEditorPage')
+          return { Component: PollEditorPage }
+        },
+      },
+      {
+        path: 'polls/:id/edit',
+        lazy: async () => {
+          const { PollEditorPage } = await import('../pages/PollEditorPage')
+          return { Component: PollEditorPage }
+        },
+      },
+      {
+        path: 'host/:code',
+        lazy: async () => {
+          const { HostSessionPage } = await import('../pages/HostSessionPage')
+          return { Component: HostSessionPage }
+        },
+      },
     ],
+  },
+  {
+    path: 'join',
+    lazy: async () => {
+      const { JoinPage } = await import('../pages/JoinPage')
+      return { Component: JoinPage }
+    },
+  },
+  {
+    path: 'join/:code',
+    lazy: async () => {
+      const { JoinPage } = await import('../pages/JoinPage')
+      return { Component: JoinPage }
+    },
   },
   {
     path: '*',

@@ -20,7 +20,38 @@
 - frontend/src/pages/RegisterPage.tsx (implemented)
 - tasks.json (TASK-006 status → done)
 
+---
+
+## TASK-009: Dashboard with polls list — DONE (2026-03-09)
+
+### What was done:
+- Created `frontend/src/api/polls.ts` — getPolls, deletePoll, copyPoll, createRoom API functions
+- Created `frontend/src/components/PollCard.tsx` — card with title, description, date, Edit/Launch/Copy/Delete buttons
+- Created `frontend/src/components/ConfirmDialog.tsx` — reusable modal confirmation dialog
+- Implemented full `frontend/src/pages/DashboardPage.tsx`:
+  - Polls grid with responsive layout (1/2/3 columns)
+  - Loading skeletons (animate-pulse) while fetching
+  - Empty state with "Create poll" CTA
+  - Delete confirmation via ConfirmDialog
+  - Copy creates new card at top of list
+  - Launch calls POST /api/rooms, navigates to /host/:code
+  - Error banner with dismiss
+  - Header with username and logout
+- Updated `frontend/src/routes/index.tsx` with routes: /polls/new, /polls/:id/edit, /host/:code, /join, /join/:code
+- Added stub pages: PollEditorPage.tsx, HostSessionPage.tsx, JoinPage.tsx
+
+### Files changed:
+- frontend/src/api/polls.ts (new)
+- frontend/src/components/PollCard.tsx (new)
+- frontend/src/components/ConfirmDialog.tsx (new)
+- frontend/src/pages/DashboardPage.tsx (implemented)
+- frontend/src/pages/PollEditorPage.tsx (new stub)
+- frontend/src/pages/HostSessionPage.tsx (new stub)
+- frontend/src/pages/JoinPage.tsx (new stub)
+- frontend/src/routes/index.tsx (added new routes)
+- tasks.json (TASK-009 status → done)
+
 ### Notes for next iteration:
-- Next priority: TASK-009 (high) — Dashboard page with polls list (depends on TASK-006 ✓, TASK-007 ✓)
-- TASK-009 needs: DashboardPage with poll cards, loading skeletons, delete confirmation dialog
-- Backend API for polls is at GET /api/polls, DELETE /api/polls/:id, POST /api/polls/:id/copy
+- Next priority: TASK-010 (high) — Poll editor (depends on TASK-008 ✓, TASK-009 ✓)
+- TASK-010 needs: PollEditorPage with form, drag-and-drop question list, QuestionTypeSelector, QuestionEditorPanel
+- TASK-015 (HostSessionPage) also ready: depends on TASK-006 ✓, TASK-014 ✓
