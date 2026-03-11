@@ -134,8 +134,10 @@ type SessionEndData struct {
 
 // AnswerCountData is sent to the organizer when a new answer arrives.
 type AnswerCountData struct {
-	Answered int `json:"answered"`
-	Total    int `json:"total"`
+	Answered      int       `json:"answered"`
+	Total         int       `json:"total"`
+	ParticipantID uuid.UUID `json:"participant_id"`
+	AvgResponseMs int       `json:"avg_response_ms"`
 }
 
 // WordcloudWord is a single word with its frequency count.

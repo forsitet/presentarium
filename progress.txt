@@ -689,7 +689,36 @@
 - tasks.json (TASK-025 status → done)
 
 ### Notes for next iteration:
-- TASK-033 (real-time stats panel) — medium, all deps done; add participant status icons (✓/◷/✗)
+- TASK-033 ✓ DONE — real-time monitoring panel implemented
 - TASK-046 (E2E full scenario) — high; needs live env with multiple browsers
 - TASK-041 (responsive design) — medium, deps done; needs mobile breakpoint testing
 - TASK-043 (participant history localStorage) — medium, deps done
+
+---
+
+## TASK-033: Frontend real-time monitoring panel for organizer — DONE (2026-01-28)
+
+### What was done:
+- Extended `backend/internal/ws/messages.go`: added `ParticipantID uuid.UUID` and `AvgResponseMs int` fields to `AnswerCountData` struct; backend now sends which participant answered and the running average response time
+- Extended `backend/internal/ws/room.go`: `IncrementAnswerCount` signature changed to `IncrementAnswerCount(responseMs int) (count int, avgMs int)`, added `totalResponseMs int` field to `Room` struct for running average tracking; `ResetAnswerCount` also resets `totalResponseMs`
+- Updated `backend/internal/service/conduct_service.go`: both `handleSubmitAnswer` and `handleSubmitText` now pass `responseTimeMs` to `IncrementAnswerCount` and include `ParticipantID` + `AvgResponseMs` in the `answer_count` broadcast to the organizer
+- Updated `backend/internal/ws/room_test.go`: fixed `IncrementAnswerCount` calls to pass `responseMs int` arg and validate avg calculation
+- Updated `frontend/src/pages/HostSessionPage.tsx`:
+  - Added `avgResponseMs`, `answeredParticipantIds: Set<string>`, `disconnectedDuringQuestion: Map<string,string>` state
+  - `onQuestionStart` now resets all three new state variables
+  - `onAnswerCount` handler reads `participant_id` and `avg_response_ms` from WS payload, adds ID to set
+  - `onParticipantLeft` now captures participant name and stores in `disconnectedDuringQuestion` map
+  - Monitoring panel in `showing_question` state replaced/enhanced with: progress bar + % label, average response time display (shown once first answer arrives), per-participant status list (✓ green / ◷ gray / ✗ red strikethrough) scrollable up to 6 rows
+
+### Files changed:
+- backend/internal/ws/messages.go (ParticipantID + AvgResponseMs in AnswerCountData)
+- backend/internal/ws/room.go (totalResponseMs field, updated IncrementAnswerCount signature)
+- backend/internal/ws/room_test.go (fix IncrementAnswerCount call sites with responseMs param)
+- backend/internal/service/conduct_service.go (pass responseMs + participantID in answer_count broadcast)
+- frontend/src/pages/HostSessionPage.tsx (monitoring panel with status icons + avg response time)
+- tasks.json (TASK-033 status → done)
+
+### Notes for next iteration:
+- TASK-046 (E2E full scenario, HIGH) — all deps done; requires live app + multiple browsers (manual)
+- TASK-041 (responsive design, medium) — all deps done; needs mobile breakpoint testing
+- TASK-043 (participant history localStorage, medium) — all deps done

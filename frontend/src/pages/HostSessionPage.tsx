@@ -85,6 +85,9 @@ export function HostSessionPage() {
   const [timer, setTimer] = useState(0)
   const [answered, setAnswered] = useState(0)
   const [totalPart, setTotalPart] = useState(0)
+  const [avgResponseMs, setAvgResponseMs] = useState(0)
+  const [answeredParticipantIds, setAnsweredParticipantIds] = useState<Set<string>>(new Set())
+  const [disconnectedDuringQuestion, setDisconnectedDuringQuestion] = useState<Map<string, string>>(new Map())
   const [distribution, setDistribution] = useState<Record<string, number>>({})
   const [revealedOptions, setRevealedOptions] = useState<RevealedOption[] | null>(null)
   const [lbEntries, setLbEntries] = useState<LBEntry[]>([])
@@ -157,8 +160,16 @@ export function HostSessionPage() {
     socket.connect(code, accessToken ?? undefined)
 
     const onParticipantJoined = (data: unknown) => addParticipant(data as Participant)
-    const onParticipantLeft = (data: unknown) =>
-      removeParticipant((data as { id: string }).id)
+    const onParticipantLeft = (data: unknown) => {
+      const { id, name } = data as { id: string; name?: string }
+      removeParticipant(id)
+      // Track disconnection so we can show ✗ during an active question
+      setDisconnectedDuringQuestion((prev) => {
+        const next = new Map(prev)
+        next.set(id, name ?? id)
+        return next
+      })
+    }
 
     const onQuestionStart = (data: unknown) => {
       const q = data as QuestionStartPayload
@@ -166,6 +177,9 @@ export function HostSessionPage() {
       setTimer(q.time_limit_seconds)
       setAnswered(0)
       setTotalPart(0)
+      setAvgResponseMs(0)
+      setAnsweredParticipantIds(new Set())
+      setDisconnectedDuringQuestion(new Map())
       setDistribution({})
       setRevealedOptions(null)
       setLbEntries([])
@@ -184,9 +198,22 @@ export function HostSessionPage() {
     }
 
     const onAnswerCount = (data: unknown) => {
-      const { answered: a, total: t } = data as { answered: number; total: number }
+      const { answered: a, total: t, participant_id, avg_response_ms } = data as {
+        answered: number
+        total: number
+        participant_id?: string
+        avg_response_ms?: number
+      }
       setAnswered(a)
       setTotalPart(t)
+      if (avg_response_ms !== undefined) setAvgResponseMs(avg_response_ms)
+      if (participant_id) {
+        setAnsweredParticipantIds((prev) => {
+          const next = new Set(prev)
+          next.add(participant_id)
+          return next
+        })
+      }
     }
 
     const onQuestionEnd = (data: unknown) => {
@@ -484,27 +511,86 @@ export function HostSessionPage() {
               )}
             </div>
 
-            {/* Answered progress bar — hide for brainstorm (BrainstormBoard has its own stats) */}
+            {/* Monitoring panel — hide for brainstorm (BrainstormBoard has its own stats) */}
             {activeQ.type !== 'brainstorm' && (
-              <div className="bg-gray-800 rounded-2xl border border-gray-700 p-5">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-gray-400 text-sm">Ответили</span>
-                  <span className="text-white font-bold">
-                    {answered} / {totalPart || participants.length}
-                  </span>
+              <div className="bg-gray-800 rounded-2xl border border-gray-700 p-5 space-y-4">
+                {/* Progress bar */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-gray-400 text-sm">Ответили</span>
+                    <span className="text-white font-bold">
+                      {answered} / {totalPart || participants.length}
+                      {(totalPart || participants.length) > 0 && (
+                        <span className="text-gray-400 font-normal text-sm ml-1">
+                          ({Math.round((answered / (totalPart || participants.length)) * 100)}%)
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                  <div className="h-3 bg-gray-700 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-indigo-500 rounded-full transition-all duration-300"
+                      style={{
+                        width: `${
+                          (totalPart || participants.length) > 0
+                            ? (answered / (totalPart || participants.length)) * 100
+                            : 0
+                        }%`,
+                      }}
+                    />
+                  </div>
                 </div>
-                <div className="h-3 bg-gray-700 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-indigo-500 rounded-full transition-all duration-300"
-                    style={{
-                      width: `${
-                        (totalPart || participants.length) > 0
-                          ? (answered / (totalPart || participants.length)) * 100
-                          : 0
-                      }%`,
-                    }}
-                  />
-                </div>
+
+                {/* Avg response time */}
+                {avgResponseMs > 0 && (
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-gray-400">Среднее время ответа</span>
+                    <span className="text-white font-medium tabular-nums">
+                      {(avgResponseMs / 1000).toFixed(1)} сек
+                    </span>
+                  </div>
+                )}
+
+                {/* Per-participant status list */}
+                {(participants.length > 0 || disconnectedDuringQuestion.size > 0) && (
+                  <div>
+                    <p className="text-gray-400 text-xs uppercase tracking-wide mb-2">
+                      Участники
+                    </p>
+                    <div className="space-y-1 max-h-36 overflow-y-auto">
+                      {participants.map((p) => {
+                        const hasAnswered = answeredParticipantIds.has(p.id)
+                        return (
+                          <div key={p.id} className="flex items-center gap-2 text-sm">
+                            <span
+                              className={`text-base leading-none ${
+                                hasAnswered ? 'text-green-400' : 'text-gray-500'
+                              }`}
+                              title={hasAnswered ? 'Ответил' : 'Ожидает'}
+                            >
+                              {hasAnswered ? '✓' : '◷'}
+                            </span>
+                            <span
+                              className={`truncate flex-1 ${
+                                hasAnswered ? 'text-gray-300' : 'text-gray-500'
+                              }`}
+                            >
+                              {p.name}
+                            </span>
+                          </div>
+                        )
+                      })}
+                      {Array.from(disconnectedDuringQuestion.entries()).map(([id, name]) => (
+                        <div key={id} className="flex items-center gap-2 text-sm">
+                          <span className="text-red-500 text-base leading-none" title="Отключился">
+                            ✗
+                          </span>
+                          <span className="truncate flex-1 text-red-400 line-through">{name}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>

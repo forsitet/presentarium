@@ -780,7 +780,7 @@
         "Шаг 4: гистограмма обновляется при каждом новом ответе"
       ],
       "dependencies": ["TASK-020", "TASK-018"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-034",

@@ -94,20 +94,26 @@ func TestRoom_AnswerCount(t *testing.T) {
 	if r.AnswerCount() != 0 {
 		t.Error("initial answer count should be 0")
 	}
-	n1 := r.IncrementAnswerCount()
+	n1, avg1 := r.IncrementAnswerCount(1000)
 	if n1 != 1 {
 		t.Errorf("after first increment: want 1, got %d", n1)
 	}
-	n2 := r.IncrementAnswerCount()
+	if avg1 != 1000 {
+		t.Errorf("avg after first increment: want 1000, got %d", avg1)
+	}
+	n2, avg2 := r.IncrementAnswerCount(3000)
 	if n2 != 2 {
 		t.Errorf("after second increment: want 2, got %d", n2)
+	}
+	if avg2 != 2000 {
+		t.Errorf("avg after second increment: want 2000, got %d", avg2)
 	}
 }
 
 func TestRoom_ResetAnswerCount(t *testing.T) {
 	r := newTestRoom()
-	r.IncrementAnswerCount()
-	r.IncrementAnswerCount()
+	r.IncrementAnswerCount(500)
+	r.IncrementAnswerCount(1500)
 	r.ResetAnswerCount()
 	if r.AnswerCount() != 0 {
 		t.Errorf("after reset: want 0, got %d", r.AnswerCount())
@@ -301,7 +307,7 @@ func TestRoom_ConcurrentAnswerCount(t *testing.T) {
 	for i := 0; i < goroutines; i++ {
 		go func() {
 			defer wg.Done()
-			r.IncrementAnswerCount()
+			r.IncrementAnswerCount(100)
 		}()
 	}
 	wg.Wait()

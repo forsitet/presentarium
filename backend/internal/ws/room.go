@@ -45,8 +45,9 @@ type Room struct {
 	organizer       *Client
 	currentQuestion *ActiveQuestion
 	stopTimer       chan struct{}
-	answerCount     int            // number of answers received for the current question
-	wordCloudFreq   map[string]int // per-question word frequency for word_cloud questions
+	answerCount        int            // number of answers received for the current question
+	totalResponseMs    int            // sum of response times in ms (for average calculation)
+	wordCloudFreq      map[string]int // per-question word frequency for word_cloud questions
 
 	// Brainstorm in-memory state (reset on each brainstorm question start).
 	brainstormPhase      string              // collecting | voting | results
@@ -233,11 +234,12 @@ func (r *Room) TryFinishQuestion(questionID uuid.UUID) bool {
 	return true
 }
 
-// ResetAnswerCount resets the in-memory answer counter for a new question.
+// ResetAnswerCount resets the in-memory answer counter and response time tracking for a new question.
 func (r *Room) ResetAnswerCount() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.answerCount = 0
+	r.totalResponseMs = 0
 	r.wordCloudFreq = nil
 }
 
@@ -353,12 +355,14 @@ func sortWordcloudWords(words []WordcloudWord) {
 	}
 }
 
-// IncrementAnswerCount atomically increments and returns the new answer count.
-func (r *Room) IncrementAnswerCount() int {
+// IncrementAnswerCount atomically increments the answer counter and adds the response time.
+// Returns the new answer count and the updated average response time in milliseconds.
+func (r *Room) IncrementAnswerCount(responseMs int) (count int, avgMs int) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.answerCount++
-	return r.answerCount
+	r.totalResponseMs += responseMs
+	return r.answerCount, r.totalResponseMs / r.answerCount
 }
 
 // AnswerCount returns the current answer count for the active question.

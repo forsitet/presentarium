@@ -497,7 +497,7 @@ func (s *conductService) handleSubmitAnswer(c *ws.Client, room *ws.Room, env ws.
 		_ = s.answerRepo.UpdateParticipantScore(ctx, *participantID, earnedScore)
 	}
 
-	count := room.IncrementAnswerCount()
+	count, avgMs := room.IncrementAnswerCount(responseTimeMs)
 	total := room.ParticipantCount()
 
 	if msg, err2 := ws.NewEnvelope(ws.MsgTypeAnswerAccepted, ws.AnswerAcceptedData{
@@ -509,8 +509,10 @@ func (s *conductService) handleSubmitAnswer(c *ws.Client, room *ws.Room, env ws.
 	}
 
 	if msg, err2 := ws.NewEnvelope(ws.MsgTypeAnswerCount, ws.AnswerCountData{
-		Answered: count,
-		Total:    total,
+		Answered:      count,
+		Total:         total,
+		ParticipantID: *participantID,
+		AvgResponseMs: avgMs,
 	}); err2 == nil {
 		room.SendToOrganizer(msg)
 	}
@@ -588,7 +590,7 @@ func (s *conductService) handleSubmitText(c *ws.Client, room *ws.Room, env ws.En
 		return
 	}
 
-	count := room.IncrementAnswerCount()
+	count, avgMs := room.IncrementAnswerCount(responseTimeMs)
 	total := room.ParticipantCount()
 
 	if msg, err2 := ws.NewEnvelope(ws.MsgTypeAnswerAccepted, ws.AnswerAcceptedData{
@@ -599,8 +601,10 @@ func (s *conductService) handleSubmitText(c *ws.Client, room *ws.Room, env ws.En
 	}
 
 	if msg, err2 := ws.NewEnvelope(ws.MsgTypeAnswerCount, ws.AnswerCountData{
-		Answered: count,
-		Total:    total,
+		Answered:      count,
+		Total:         total,
+		ParticipantID: *participantID,
+		AvgResponseMs: avgMs,
 	}); err2 == nil {
 		room.SendToOrganizer(msg)
 	}
