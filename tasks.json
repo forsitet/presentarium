@@ -913,7 +913,7 @@
         "Шаг 5: CalculateScore(100, 30, 0, 'speed_bonus') → 10 (минимум 10%)"
       ],
       "dependencies": ["TASK-019", "TASK-026", "TASK-022"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-040",

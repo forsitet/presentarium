@@ -378,5 +378,43 @@
 
 ### Notes for next iteration:
 - TASK-027 (manual moderation) — now unblocked (depends on TASK-022 ✓, TASK-024 ✓, TASK-026 ✓)
-- TASK-039 (unit tests) — now unblocked (depends on TASK-019 ✓, TASK-026 ✓, TASK-022 ✓)
 - TASK-036 (Nginx) — high priority, all deps done
+- TASK-039 ✓ DONE — unit tests for scoring, room state machine, word cloud, brainstorm
+
+---
+
+## TASK-039: Backend unit tests — scoring, room state machine, word cloud — DONE (2026-01-15)
+
+### What was done:
+- Created `backend/pkg/scoring/scoring_test.go`:
+  - `TestCalculateScore_NoneRule`: none rule always returns 0 (correct, wrong, nil isCorrect)
+  - `TestCalculateScore_CorrectAnswerRule`: full basePoints for correct, 0 for wrong/nil
+  - `TestCalculateScore_SpeedBonus_Maximum`: responseTimeMs=0 → full basePoints
+  - `TestCalculateScore_SpeedBonus_Minimum`: responseTimeMs=timeLimitMs → minimum 10%
+  - `TestCalculateScore_SpeedBonus_HalfTime`: halfway through → ~50% score
+  - `TestCalculateScore_SpeedBonus_WrongAnswer`: speed_bonus + wrong → 0
+  - `TestCalculateScore_SpeedBonus_NilIsCorrect`: speed_bonus + nil → 0
+  - `TestCalculateScore_SpeedBonus_MinimumFloor`: over-time → 10% floor
+  - `TestCalculateScore_SpeedBonus_ZeroTimeLimit`: zero time limit → basePoints (no div-by-zero)
+  - `TestCalculateScore_UnknownRule`: unknown rule → 0
+  - `TestCalculateScore_SpeedBonus_MinimumFloor_SmallBase`: small base → at least 1 point
+- Created `backend/internal/ws/room_test.go` (white-box, package ws):
+  - State machine: initial state, SetState through all states
+  - TryFinishQuestion: success, wrong ID, no active question, double-finish prevention
+  - Answer count: IncrementAnswerCount, ResetAnswerCount
+  - Word cloud: AddWordCloudWords, WordCloudTopWords ordering, top-N limit, empty state, reset clears cloud
+  - Brainstorm: InitBrainstorm, SetBrainstormPhase, per-participant idea count, per-participant vote count
+  - Client tracking: ParticipantCount, ClientCount, RemoveClient, Organizer tracking
+  - Concurrency: concurrent IncrementAnswerCount (50 goroutines), concurrent AddWordCloudWords (20 goroutines) — race-safe
+
+### Files changed:
+- backend/pkg/scoring/scoring_test.go (new — 11 test functions)
+- backend/internal/ws/room_test.go (new — 20+ test functions including concurrency tests)
+- tasks.json (TASK-039 status → done)
+
+### Notes for next iteration:
+- TASK-036 (Nginx reverse proxy, high) — all deps done (TASK-002 ✓, TASK-004 ✓)
+- TASK-040 (integration tests) — now unblocked (depends on TASK-039 ✓)
+- TASK-027 (manual moderation backend) — medium priority, all deps done
+- TASK-023 (frontend word cloud) — medium, all deps done
+- TASK-025 (frontend brainstorm UI) — medium, all deps done
