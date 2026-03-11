@@ -9,6 +9,7 @@ import { ParticipantList } from '../components/ParticipantList'
 import { AnswerBarChart } from '../components/AnswerBarChart'
 import { Leaderboard } from '../components/Leaderboard'
 import { WordCloudView } from '../components/WordCloudView'
+import { BrainstormBoard } from '../components/BrainstormBoard'
 import type { Participant, Question } from '../types'
 
 interface WordCloudWord {
@@ -470,6 +471,12 @@ export function HostSessionPage() {
                   }
                   showModerationPanel
                 />
+              ) : activeQ.type === 'brainstorm' ? (
+                <BrainstormBoard
+                  questionId={activeQ.question_id}
+                  answeredCount={answered}
+                  totalParticipants={totalPart || participants.length}
+                />
               ) : (
                 <p className="text-gray-500 text-sm text-center py-12">
                   {answered} текстовых ответов
@@ -477,27 +484,29 @@ export function HostSessionPage() {
               )}
             </div>
 
-            {/* Answered progress bar */}
-            <div className="bg-gray-800 rounded-2xl border border-gray-700 p-5">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-gray-400 text-sm">Ответили</span>
-                <span className="text-white font-bold">
-                  {answered} / {totalPart || participants.length}
-                </span>
+            {/* Answered progress bar — hide for brainstorm (BrainstormBoard has its own stats) */}
+            {activeQ.type !== 'brainstorm' && (
+              <div className="bg-gray-800 rounded-2xl border border-gray-700 p-5">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-gray-400 text-sm">Ответили</span>
+                  <span className="text-white font-bold">
+                    {answered} / {totalPart || participants.length}
+                  </span>
+                </div>
+                <div className="h-3 bg-gray-700 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-indigo-500 rounded-full transition-all duration-300"
+                    style={{
+                      width: `${
+                        (totalPart || participants.length) > 0
+                          ? (answered / (totalPart || participants.length)) * 100
+                          : 0
+                      }%`,
+                    }}
+                  />
+                </div>
               </div>
-              <div className="h-3 bg-gray-700 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-indigo-500 rounded-full transition-all duration-300"
-                  style={{
-                    width: `${
-                      (totalPart || participants.length) > 0
-                        ? (answered / (totalPart || participants.length)) * 100
-                        : 0
-                    }%`,
-                  }}
-                />
-              </div>
-            </div>
+            )}
           </div>
         </div>
       </div>
@@ -593,8 +602,9 @@ export function HostSessionPage() {
                 />
               ) : (
                 <p className="text-gray-500 text-sm text-center py-8">
-                  Текстовых ответов:{' '}
-                  {Object.values(distribution).reduce((a, b) => a + b, 0)}
+                  {activeQ.type === 'brainstorm'
+                    ? 'Результаты брейншторма показаны на доске идей'
+                    : `Текстовых ответов: ${Object.values(distribution).reduce((a, b) => a + b, 0)}`}
                 </p>
               )}
             </div>

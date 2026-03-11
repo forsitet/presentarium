@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { socket } from '../ws/socket'
+import { BrainstormInput } from '../components/BrainstormInput'
 
 type RoomStatus = 'waiting' | 'active' | 'showing_question' | 'showing_results' | 'finished'
 
@@ -360,8 +361,8 @@ export function ParticipantSessionPage() {
               />
             )}
             {question.type === 'brainstorm' && (
-              <div className="flex-1 flex items-center justify-center">
-                <p className="text-white/60 text-center">Режим брейншторма</p>
+              <div className="flex-1 overflow-y-auto">
+                <BrainstormInput questionId={question.question_id} />
               </div>
             )}
           </div>
