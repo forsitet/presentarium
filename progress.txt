@@ -777,3 +777,54 @@
 - TASK-044 (password recovery backend, medium) — all deps done
 - TASK-042 (animations UX polish, low) — depends on TASK-041 ✓
 - TASK-043 (participant history localStorage, medium) — all deps done
+
+---
+
+## TASK-046: E2E full quiz scenario — DONE (2026-03-09)
+
+### What was done:
+- Created `backend/test/e2e/quiz_scenario_test.go` with `//go:build integration` tag
+- Implemented 3 automated integration tests that cover all TASK-046 acceptance criteria:
+
+  **TestFullQuizScenario** — canonical E2E flow:
+  - Registers organizer via POST /api/auth/register
+  - Creates poll with correct_answer scoring
+  - Adds 2 questions: single_choice (option 1 correct) + open_text
+  - Creates room via POST /api/rooms
+  - Connects 3 WebSocket participants (Alice, Bob, Charlie) and organizer
+  - Starts session via PATCH /api/rooms/:code/state {action: start}
+  - Runs Q1: organizer sends show_question WS msg → all 3 submit_answer → all get answer_accepted
+  - Ends Q1 early via PATCH {action: end_question} → waits for question_end broadcast
+  - Runs Q2: same pattern with submit_text for open_text question
+  - Ends session via PATCH {action: end}
+  - Verifies session in GET /api/sessions history
+  - Verifies leaderboard: 3 entries each with 100 pts via GET /api/sessions/:id
+  - Exports CSV via GET /api/sessions/:id/export/csv → counts 6 data rows (3×2)
+  - Verifies CSV header has all 6 required columns
+
+  **TestDuplicateActiveRoom** — verifies 409 Conflict when creating a second room for same poll
+
+  **TestCorrectAnswerScoring** — verifies correct=50pts, wrong=0pts; leaderboard rank 1 is the correct answerer
+
+- Test infrastructure:
+  - `setupTestServer`: wires all repos/services/handlers into httptest.Server
+  - DB URL from TEST_DB_URL env var (default: postgres:5432/presentarium_test)
+  - Skips gracefully if DB unreachable or unmigrated
+  - `wsClient`: goroutine-based WS message reader with typed wait helpers
+  - `countCSVDataRows`: BOM-aware CSV row counter
+
+### Files changed:
+- backend/test/e2e/quiz_scenario_test.go (new)
+- tasks.json (TASK-046 status → done)
+
+### Notes for next iteration:
+- Pending tasks by priority:
+  - TASK-040 (integration tests with testcontainers, medium) — deps done
+  - TASK-043 (participant history localStorage, medium) — deps done
+  - TASK-044 (password recovery email, medium) — deps done
+  - TASK-045 (random question order, medium) — deps done
+  - TASK-037 (Docker multi-stage prod, medium) — deps done
+  - TASK-031 (PDF export, low) — deps done
+  - TASK-032 (frontend PDF button, low) — depends on TASK-031
+  - TASK-042 (animations UX polish, low) — deps done
+  - TASK-038 (CI/CD GitHub Actions, low) — depends on TASK-037
