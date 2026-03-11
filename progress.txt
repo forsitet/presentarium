@@ -354,5 +354,29 @@
 ### Notes for next iteration:
 - TASK-025 (frontend brainstorm UI) is now unblocked — needs BrainstormInput.tsx, BrainstormBoard.tsx
 - TASK-023 (frontend word cloud) is also high priority — needs WordCloudView.tsx with react-wordcloud
-- TASK-026 (badwords filter hot reload) — remaining work: implement hot reload without server restart
+- TASK-026 ✓ DONE — hot reload, bypass detection, open_text filter all implemented
 - TASK-036 (Nginx reverse proxy) — high priority, all deps done
+
+---
+
+## TASK-026: Backend badwords filter — bypass detection, open_text, hot reload — DONE (2025-12-05)
+
+### What was done:
+- `pkg/badwords/filter.go`:
+  - Added bypass detection: `Filter()` strips all spaces from input, normalizes, and checks if the result is a single bad word (handles 'н е ц е н з у р н о е' style evasion)
+  - Added `WatchFile(path string, interval time.Duration)`: background goroutine polls file mtime every `interval`; on change calls `LoadFromFile` — hot reload without server restart
+- `pkg/badwords/filter_test.go`: added `TestFilter_SpacesBypass` and `TestFilter_SpacesBypassRussian` tests
+- `internal/service/conduct_service.go`: `handleSubmitText` now applies badwords filter to **both** `open_text` and `word_cloud` (previously only `word_cloud`)
+- `cmd/server/main.go`: after loading dictionary, calls `badwords.WatchFile(path, 10*time.Second)`; added `"time"` import
+
+### Files changed:
+- backend/pkg/badwords/filter.go (WatchFile, bypass detection)
+- backend/pkg/badwords/filter_test.go (bypass tests)
+- backend/internal/service/conduct_service.go (open_text filter)
+- backend/cmd/server/main.go (wire WatchFile)
+- tasks.json (TASK-026 status → done)
+
+### Notes for next iteration:
+- TASK-027 (manual moderation) — now unblocked (depends on TASK-022 ✓, TASK-024 ✓, TASK-026 ✓)
+- TASK-039 (unit tests) — now unblocked (depends on TASK-019 ✓, TASK-026 ✓, TASK-022 ✓)
+- TASK-036 (Nginx) — high priority, all deps done

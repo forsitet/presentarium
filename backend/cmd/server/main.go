@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
@@ -27,11 +28,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Load badwords dictionary (optional — log warning if file is missing).
-	if err := badwords.LoadFromFile("pkg/badwords/badwords.json"); err != nil {
+	// Load badwords dictionary and start hot-reload watcher.
+	const badwordsPath = "pkg/badwords/badwords.json"
+	if err := badwords.LoadFromFile(badwordsPath); err != nil {
 		slog.Warn("badwords dictionary not loaded", "error", err)
 	} else {
 		slog.Info("badwords dictionary loaded")
+		badwords.WatchFile(badwordsPath, 10*time.Second)
 	}
 
 	db, err := sqlx.Connect("postgres", cfg.DSN())

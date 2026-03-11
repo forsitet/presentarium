@@ -561,9 +561,9 @@ func (s *conductService) handleSubmitText(c *ws.Client, room *ws.Room, env ws.En
 
 	responseTimeMs := int(time.Since(time.Unix(current.StartedAt, 0)).Milliseconds())
 
-	// For word_cloud questions: normalize, filter, and store the processed text.
+	// For word_cloud and open_text questions: apply badwords filter before storing.
 	storedText := data.Text
-	if current.Type == "word_cloud" {
+	if current.Type == "word_cloud" || current.Type == "open_text" {
 		filtered, _ := badwords.Filter(data.Text)
 		storedText = filtered
 	}
