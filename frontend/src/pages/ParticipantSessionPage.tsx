@@ -63,6 +63,21 @@ function TimerBar({ remaining, total }: { remaining: number; total: number }) {
   )
 }
 
+/** Floating +N score popup that rises and fades */
+function ScorePopup({ score, animKey }: { score: number; animKey: number }) {
+  if (score <= 0) return null
+  return (
+    <div
+      key={animKey}
+      className="pointer-events-none absolute left-1/2 top-1/3 -translate-x-1/2 animate-float-up z-50"
+    >
+      <span className="text-4xl font-black text-yellow-300 drop-shadow-lg select-none">
+        +{score}
+      </span>
+    </div>
+  )
+}
+
 export function ParticipantSessionPage() {
   const { code } = useParams<{ code: string }>()
   const navigate = useNavigate()
@@ -82,12 +97,20 @@ export function ParticipantSessionPage() {
   const [revealedOptions, setRevealedOptions] = useState<QuestionOption[]>([])
   const [myRank, setMyRank] = useState<number>(0)
   const [myScore, setMyScore] = useState<number>(0)
+  const [totalParticipants, setTotalParticipants] = useState<number>(0)
 
   // Final session data
   const [finalData, setFinalData] = useState<FinalData | null>(null)
 
+  // Floating score popup
+  const [scorePopup, setScorePopup] = useState<{ score: number; key: number } | null>(null)
+  const scorePopupKey = useRef(0)
+
   // Accumulate score across questions
   const totalScoreRef = useRef(0)
+
+  // Screen animation key — changes on every meaningful state transition
+  const [screenKey, setScreenKey] = useState(0)
 
   useEffect(() => {
     if (!code) {
@@ -136,7 +159,9 @@ export function ParticipantSessionPage() {
       setAnswerSubmitted(false)
       setAnswerResult(null)
       setRevealedOptions([])
+      setScorePopup(null)
       setStatus('showing_question')
+      setScreenKey((k) => k + 1)
     }
 
     const onTimerTick = (data: unknown) => {
@@ -148,28 +173,38 @@ export function ParticipantSessionPage() {
       const d = data as { score: number; is_correct?: boolean | null }
       setAnswerResult({ score: d.score, is_correct: d.is_correct })
       totalScoreRef.current += d.score
+      if (d.score > 0) {
+        scorePopupKey.current += 1
+        setScorePopup({ score: d.score, key: scorePopupKey.current })
+        setTimeout(() => setScorePopup(null), 1700)
+      }
     }
 
     const onQuestionEnd = (data: unknown) => {
       const d = data as { question_id: string; options?: QuestionOption[] }
       if (d.options) setRevealedOptions(d.options)
       setStatus('showing_results')
+      setScreenKey((k) => k + 1)
     }
 
     const onLeaderboard = (data: unknown) => {
       const d = data as { rankings: LeaderboardEntry[]; my_rank?: number; my_score?: number }
       if (d.my_rank) setMyRank(d.my_rank)
       if (d.my_score !== undefined) setMyScore(d.my_score)
+      if (d.rankings?.length) setTotalParticipants(d.rankings.length)
     }
 
     const onSessionEnd = (data: unknown) => {
       const d = data as { rankings: LeaderboardEntry[]; my_rank?: number; my_score?: number }
+      const rankings = d.rankings || []
       setFinalData({
-        rankings: d.rankings || [],
+        rankings,
         my_rank: d.my_rank || 0,
         my_score: d.my_score || totalScoreRef.current,
       })
+      setTotalParticipants(rankings.length)
       setStatus('finished')
+      setScreenKey((k) => k + 1)
     }
 
     socket.on('room_state_changed', onStateChanged)
@@ -220,19 +255,26 @@ export function ParticipantSessionPage() {
   function submitText() {
     if (answerSubmitted || !question || textAnswer.trim() === '') return
     setAnswerSubmitted(true)
-    const msgType = question.type === 'word_cloud' ? 'submit_text' : 'submit_text'
-    socket.send(msgType, { question_id: question.question_id, text: textAnswer.trim() })
+    socket.send('submit_text', { question_id: question.question_id, text: textAnswer.trim() })
   }
 
-  // ---- Render helpers ----
+  // ---- Render ----
 
   if (status === 'finished') {
-    return <FinalScreen finalData={finalData} onHome={() => navigate('/join')} />
+    return (
+      <FinalScreen
+        key={screenKey}
+        finalData={finalData}
+        totalParticipants={totalParticipants}
+        onHome={() => navigate('/join')}
+      />
+    )
   }
 
   if (status === 'showing_results' && question) {
     return (
       <ResultsScreen
+        key={screenKey}
         question={question}
         revealedOptions={revealedOptions}
         answerResult={answerResult}
@@ -240,19 +282,30 @@ export function ParticipantSessionPage() {
         selectedMultiple={selectedMultiple}
         myRank={myRank}
         myScore={myScore}
+        totalParticipants={totalParticipants}
       />
     )
   }
 
   if (status === 'showing_question' && question) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 flex flex-col p-4">
+      <div
+        key={screenKey}
+        className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 flex flex-col p-4 animate-fade-in-up relative overflow-hidden"
+      >
+        {/* Floating score popup */}
+        {scorePopup && <ScorePopup score={scorePopup.score} animKey={scorePopup.key} />}
+
         {/* Header */}
         <div className="flex items-center justify-between mb-4 text-white/80 text-sm">
           <span>
             Вопрос {question.position} / {question.total}
           </span>
-          <span className="font-bold text-lg text-white">{timeRemaining}с</span>
+          <span
+            className={`font-bold text-lg ${timeRemaining <= 5 ? 'text-red-300 animate-pulse' : 'text-white'}`}
+          >
+            {timeRemaining}с
+          </span>
           <span>{question.points} очков</span>
         </div>
 
@@ -269,7 +322,7 @@ export function ParticipantSessionPage() {
         {/* Answer submitted overlay */}
         {answerSubmitted && (
           <div className="flex-1 flex items-center justify-center">
-            <div className="bg-white/20 backdrop-blur rounded-2xl p-8 text-center text-white">
+            <div className="bg-white/20 backdrop-blur rounded-2xl p-8 text-center text-white animate-score-pop">
               <div className="text-5xl mb-3">✓</div>
               <p className="text-2xl font-bold">Ответ принят!</p>
               <p className="text-white/70 mt-2">Ждём завершения вопроса...</p>
@@ -457,7 +510,9 @@ function TextInput({
         className="w-full rounded-xl bg-white/10 text-white placeholder-white/40 border border-white/20 p-4 text-lg focus:outline-none focus:border-white/60 resize-none"
       />
       <div className="flex justify-between text-white/50 text-sm px-1">
-        <span>{value.length}/{maxLength}</span>
+        <span>
+          {value.length}/{maxLength}
+        </span>
       </div>
       <button
         onClick={onSubmit}
@@ -478,6 +533,7 @@ function ResultsScreen({
   selectedMultiple,
   myRank,
   myScore,
+  totalParticipants,
 }: {
   question: CurrentQuestion
   revealedOptions: QuestionOption[]
@@ -486,6 +542,7 @@ function ResultsScreen({
   selectedMultiple: Set<number>
   myRank: number
   myScore: number
+  totalParticipants: number
 }) {
   const opts = revealedOptions.length > 0 ? revealedOptions : question.options
   const isChoiceType =
@@ -494,10 +551,10 @@ function ResultsScreen({
     question.type === 'image_choice'
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 flex flex-col p-4">
+    <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 flex flex-col p-4 animate-fade-in-up">
       {/* Score badge */}
       {answerResult && (
-        <div className="mb-4 text-center">
+        <div className="mb-4 text-center animate-score-pop">
           <div
             className={`inline-flex items-center gap-2 px-5 py-3 rounded-full font-bold text-lg ${
               answerResult.is_correct === true
@@ -547,7 +604,8 @@ function ResultsScreen({
             return (
               <div
                 key={idx}
-                className={`min-h-[56px] rounded-xl px-3 py-3 text-white font-semibold border-2 ${bgClass} ${borderClass} flex items-center gap-2`}
+                className={`min-h-[56px] rounded-xl px-3 py-3 text-white font-semibold border-2 ${bgClass} ${borderClass} flex items-center gap-2 animate-slide-stagger`}
+                style={{ animationDelay: `${idx * 60}ms` }}
               >
                 <span className="text-lg opacity-70">{OPTION_COLORS[idx % OPTION_COLORS.length].icon}</span>
                 <span className="flex-1 text-sm leading-tight">{opt.text}</span>
@@ -559,14 +617,17 @@ function ResultsScreen({
         </div>
       )}
 
-      {/* Rank */}
+      {/* Rank — shows "Вы на N месте из M" */}
       {myRank > 0 && (
-        <div className="bg-white/10 rounded-xl p-4 text-center text-white mb-3">
+        <div className="bg-white/10 rounded-xl p-4 text-center text-white mb-3 animate-fade-in-up" style={{ animationDelay: '200ms' }}>
           <p className="text-white/60 text-sm mb-1">Ваше место</p>
           <p className="text-3xl font-bold">
-            #{myRank}{' '}
-            <span className="text-white/60 text-lg font-normal">· {myScore} очков</span>
+            #{myRank}
+            {totalParticipants > 0 && (
+              <span className="text-white/50 text-xl font-normal"> из {totalParticipants}</span>
+            )}
           </p>
+          <p className="text-white/60 text-sm mt-1">{myScore} очков</p>
         </div>
       )}
 
@@ -577,65 +638,94 @@ function ResultsScreen({
 
 function FinalScreen({
   finalData,
+  totalParticipants,
   onHome,
 }: {
   finalData: FinalData | null
+  totalParticipants: number
   onHome: () => void
 }) {
   const top3 = finalData?.rankings.slice(0, 3) || []
-  const podiumOrder = [1, 0, 2] // silver, gold, bronze display order
+  // Display order: silver (idx 1), gold (idx 0), bronze (idx 2)
+  const podiumOrder = [1, 0, 2]
+  const heights = ['h-20', 'h-28', 'h-16']
+  const colors = ['bg-gray-400', 'bg-yellow-400', 'bg-amber-600']
+  const medals = ['🥈', '🥇', '🥉']
+
+  const total = totalParticipants || finalData?.rankings.length || 0
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 flex flex-col items-center justify-center p-4 text-white">
-      <div className="text-6xl mb-4">🏆</div>
-      <h1 className="text-4xl font-bold mb-2">Опрос завершён!</h1>
+    <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 flex flex-col items-center justify-center p-4 text-white overflow-hidden">
+      {/* Trophy + title — fade in first */}
+      <div className="text-6xl mb-4 animate-fade-in-up" style={{ animationDelay: '0ms' }}>
+        🏆
+      </div>
+      <h1
+        className="text-4xl font-bold mb-2 animate-fade-in-up"
+        style={{ animationDelay: '80ms' }}
+      >
+        Опрос завершён!
+      </h1>
 
+      {/* My result */}
       {finalData && finalData.my_rank > 0 && (
-        <div className="mb-6 text-center">
+        <div
+          className="mb-6 text-center animate-fade-in-up"
+          style={{ animationDelay: '160ms' }}
+        >
           <p className="text-indigo-200 text-lg">
             Ваш результат:{' '}
             <span className="font-bold text-white">
-              #{finalData.my_rank} · {finalData.my_score} очков
+              #{finalData.my_rank}
+              {total > 0 && <span className="text-white/60 font-normal"> из {total}</span>}
+              {' · '}
+              {finalData.my_score} очков
             </span>
           </p>
         </div>
       )}
 
-      {/* Podium top-3 */}
+      {/* Podium top-3 with staggered bar rise */}
       {top3.length >= 2 && (
-        <div className="flex items-end gap-3 mb-8 w-full max-w-xs">
-          {podiumOrder.map((podIdx) => {
+        <div
+          className="flex items-end gap-3 mb-8 w-full max-w-xs animate-fade-in-up"
+          style={{ animationDelay: '240ms' }}
+        >
+          {podiumOrder.map((podIdx, displayIdx) => {
             const entry = top3[podIdx]
             if (!entry) return <div key={podIdx} className="flex-1" />
-            const heights = ['h-20', 'h-28', 'h-16']
-            const colors = ['bg-gray-400', 'bg-yellow-400', 'bg-amber-600']
-            const medals = ['🥈', '🥇', '🥉']
             return (
               <div key={podIdx} className="flex-1 flex flex-col items-center">
                 <span className="text-2xl mb-1">{medals[podIdx]}</span>
-                <p className="text-xs font-semibold mb-1 text-center truncate w-full text-center">
+                <p className="text-xs font-semibold mb-1 text-center truncate w-full">
                   {entry.name}
                 </p>
                 <p className="text-xs text-white/70 mb-1">{entry.score}</p>
-                <div className={`w-full rounded-t-lg ${heights[podIdx]} ${colors[podIdx]}`} />
+                <div
+                  className={`w-full rounded-t-lg ${heights[podIdx]} ${colors[podIdx]} podium-bar`}
+                  style={{ animationDelay: `${400 + displayIdx * 120}ms` }}
+                />
               </div>
             )
           })}
         </div>
       )}
 
-      {/* Full rankings */}
+      {/* Full rankings — staggered rows */}
       {finalData && finalData.rankings.length > 0 && (
         <div className="w-full max-w-sm bg-white/10 rounded-2xl overflow-hidden mb-8">
-          {finalData.rankings.slice(0, 10).map((entry) => (
+          {finalData.rankings.slice(0, 10).map((entry, i) => (
             <div
               key={entry.id}
-              className={`flex items-center gap-3 px-4 py-3 border-b border-white/10 last:border-0 ${
+              className={`flex items-center gap-3 px-4 py-3 border-b border-white/10 last:border-0 animate-slide-stagger ${
                 entry.rank === finalData.my_rank ? 'bg-white/20' : ''
               }`}
+              style={{ animationDelay: `${600 + i * 60}ms` }}
             >
               <span className="w-6 text-center text-white/60 text-sm font-bold">
-                {entry.rank}
+                {entry.rank <= 3
+                  ? ['🥇', '🥈', '🥉'][entry.rank - 1]
+                  : entry.rank}
               </span>
               <span className="flex-1 font-medium truncate">{entry.name}</span>
               <span className="text-white/80 font-bold">{entry.score}</span>
@@ -646,7 +736,8 @@ function FinalScreen({
 
       <button
         onClick={onHome}
-        className="bg-white text-indigo-700 px-8 py-3 rounded-xl font-semibold text-lg hover:bg-indigo-50 transition-colors"
+        className="bg-white text-indigo-700 px-8 py-3 rounded-xl font-semibold text-lg hover:bg-indigo-50 transition-colors animate-fade-in-up"
+        style={{ animationDelay: '900ms' }}
       >
         На главную
       </button>
