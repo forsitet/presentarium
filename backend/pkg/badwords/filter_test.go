@@ -57,3 +57,19 @@ func TestFilter_EmptyText(t *testing.T) {
 		t.Errorf("expected empty string, got %q", filtered)
 	}
 }
+
+func TestFilter_SpacesBypass(t *testing.T) {
+	// Evasion attempt: letters of a bad word separated by spaces.
+	_, hasBad := badwords.Filter("s h i t")
+	if !hasBad {
+		t.Error("expected hasBadWords=true for spaced-out bad word")
+	}
+}
+
+func TestFilter_SpacesBypassRussian(t *testing.T) {
+	// Same evasion with Cyrillic.
+	_, hasBad := badwords.Filter("н е ц е н з у р н о е")
+	if !hasBad {
+		t.Error("expected hasBadWords=true for spaced-out Russian bad word")
+	}
+}

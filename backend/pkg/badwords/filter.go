@@ -3,9 +3,11 @@ package badwords
 
 import (
 	"encoding/json"
+	"log/slog"
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"presentarium/pkg/normalize"
 )
@@ -40,10 +42,48 @@ func LoadFromFile(path string) error {
 	return nil
 }
 
+// WatchFile starts a background goroutine that polls the file at path every interval.
+// When the file's modification time changes, the dictionary is reloaded automatically.
+func WatchFile(path string, interval time.Duration) {
+	info, err := os.Stat(path)
+	var lastMod time.Time
+	if err == nil {
+		lastMod = info.ModTime()
+	}
+
+	go func() {
+		for {
+			time.Sleep(interval)
+			info, err := os.Stat(path)
+			if err != nil {
+				continue
+			}
+			if info.ModTime().After(lastMod) {
+				lastMod = info.ModTime()
+				if err := LoadFromFile(path); err != nil {
+					slog.Warn("badwords hot reload failed", "error", err)
+				} else {
+					slog.Info("badwords dictionary reloaded")
+				}
+			}
+		}
+	}()
+}
+
 // Filter checks text against the badwords dictionary.
 // Detected words are replaced with "***".
 // Returns the filtered text and whether any bad words were found.
+// Also detects bypass attempts where letters are separated by spaces.
 func Filter(text string) (filtered string, hasBadWords bool) {
+	// Bypass detection: check if stripping all spaces produces a single bad word.
+	stripped := normalize.Text(strings.ReplaceAll(text, " ", ""))
+	mu.RLock()
+	_, isBypass := dictionary[stripped]
+	mu.RUnlock()
+	if isBypass {
+		return "***", true
+	}
+
 	words := strings.Fields(text)
 	mu.RLock()
 	defer mu.RUnlock()
