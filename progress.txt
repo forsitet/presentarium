@@ -651,6 +651,45 @@
 - tasks.json (TASK-023 status → done)
 
 ### Notes for next iteration:
-- TASK-025 (frontend brainstorm UI) — medium priority, all deps done; needs BrainstormInput.tsx, BrainstormBoard.tsx
+- TASK-025 ✓ DONE — brainstorm UI implemented
 - TASK-033 (real-time stats organizer) — medium priority, all deps done
-- TASK-046 (E2E, HIGH) — all deps done
+- TASK-046 (E2E, HIGH) — all deps done; requires live app + multiple browsers (manual)
+
+---
+
+## TASK-025: Frontend brainstorm UI — DONE (2026-01-25)
+
+### What was done:
+- Created `frontend/src/components/BrainstormInput.tsx` (participant-side):
+  - Phase "collecting": textarea + "Добавить" button, own idea list, remaining counter (5 max)
+  - Phase "voting": others' ideas with "+" vote button, remaining votes counter (3)
+  - Phase "results": ranked list with votes count and staggered animation
+  - Manages own socket subscriptions: brainstorm_idea_added, brainstorm_phase_changed,
+    brainstorm_vote_updated, answer_hidden
+  - Tracks own idea IDs via ref to filter them out in voting phase
+- Created `frontend/src/components/BrainstormBoard.tsx` (organizer-side):
+  - Real-time idea list with ✕/👁 hide/show moderation buttons
+  - Phase indicator badges (collecting → voting → results)
+  - Phase advance buttons: "Открыть голосование →" and "Показать результаты →"
+  - Results view: sorted by votes_count DESC with animated rows
+  - Stats: idea count, answered count, hidden count
+  - Manages own socket subscriptions
+- Updated `frontend/src/pages/ParticipantSessionPage.tsx`:
+  - brainstorm question type now renders `<BrainstormInput questionId={...} />`
+- Updated `frontend/src/pages/HostSessionPage.tsx`:
+  - brainstorm type in showing_question renders `<BrainstormBoard>` in right panel
+  - Progress bar hidden for brainstorm (BrainstormBoard shows its own stats)
+  - showing_results for brainstorm shows simple message (BrainstormBoard handles results internally)
+
+### Files changed:
+- frontend/src/components/BrainstormInput.tsx (new)
+- frontend/src/components/BrainstormBoard.tsx (new)
+- frontend/src/pages/ParticipantSessionPage.tsx (brainstorm type renders BrainstormInput)
+- frontend/src/pages/HostSessionPage.tsx (brainstorm type renders BrainstormBoard)
+- tasks.json (TASK-025 status → done)
+
+### Notes for next iteration:
+- TASK-033 (real-time stats panel) — medium, all deps done; add participant status icons (✓/◷/✗)
+- TASK-046 (E2E full scenario) — high; needs live env with multiple browsers
+- TASK-041 (responsive design) — medium, deps done; needs mobile breakpoint testing
+- TASK-043 (participant history localStorage) — medium, deps done
