@@ -453,6 +453,38 @@
 
 ---
 
+## TASK-030: Backend CSV export — GET /api/sessions/:id/export/csv — DONE (2025-12-10)
+
+### What was done:
+- Updated `backend/internal/repository/answer_repo.go`: added `AND a.is_hidden = false` to `ListExportBySession` query so hidden answers are excluded from export
+- Extended `backend/internal/service/history_service.go`:
+  - Added `ExportCSV(ctx, userID, sessionID uuid.UUID) ([]AnswerExportRow, *time.Time, error)` to `HistoryService` interface
+  - Implemented `ExportCSV` in `historyService`: ownership check via `GetByIDWithPoll`, returns answers + `FinishedAt` for filename
+- Extended `backend/internal/handler/session_handler.go`:
+  - Added `handleExportCSV` handler: streams UTF-8 BOM + CSV header + rows to response
+  - Columns: participant_name, question_text, answer, is_correct, score, response_time_ms
+  - Content-Type: text/csv; charset=utf-8 with Content-Disposition: attachment; filename="session_{id}_{date}.csv"
+  - `answerToString` helper: unquotes JSON strings, passes numbers/arrays as-is
+  - Proper 401/403/404 error responses
+- Updated `backend/internal/handler/routes.go`: added `GET /{id}/export/csv` route inside `/api/sessions` group
+
+### Files changed:
+- backend/internal/repository/answer_repo.go (exclude is_hidden=true from export)
+- backend/internal/service/history_service.go (ExportCSV method)
+- backend/internal/handler/session_handler.go (handleExportCSV handler + answerToString)
+- backend/internal/handler/routes.go (register /export/csv route)
+- tasks.json (TASK-030 status → done)
+
+### Notes for next iteration:
+- TASK-031 (PDF export) — now unblocked (depends on TASK-028 ✓); needs gofpdf library
+- TASK-032 (frontend CSV/PDF buttons) — depends on TASK-030 ✓ + TASK-031 (pending)
+- TASK-046 (E2E) — depends on TASK-030 ✓ + TASK-034 (pending)
+- TASK-027 (manual moderation backend) — medium, all deps done
+- TASK-023 (frontend word cloud) — medium, all deps done
+- TASK-025 (frontend brainstorm UI) — medium, all deps done
+
+---
+
 ## TASK-028: Backend session history — list, detail, participants, answers — DONE (2025-11-28)
 
 ### What was done:

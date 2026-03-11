@@ -1,8 +1,13 @@
 package handler
 
 import (
+	"encoding/csv"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
+	"strconv"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -104,4 +109,82 @@ func (h *sessionHandler) handleListAnswers(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	writeJSON(w, http.StatusOK, answers)
+}
+
+// handleExportCSV generates and streams a UTF-8 CSV file of all (non-hidden) answers.
+func (h *sessionHandler) handleExportCSV(w http.ResponseWriter, r *http.Request) {
+	userID := r.Context().Value(appmw.UserIDKey).(uuid.UUID)
+	sessionID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid session id")
+		return
+	}
+
+	answers, finishedAt, err := h.historySvc.ExportCSV(r.Context(), userID, sessionID)
+	if err != nil {
+		if errors.Is(err, errs.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "session not found")
+			return
+		}
+		if errors.Is(err, errs.ErrForbidden) {
+			writeError(w, http.StatusForbidden, "forbidden")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "failed to export csv")
+		return
+	}
+
+	// Build filename: session_{id}_{date}.csv
+	dateStr := time.Now().Format("2006-01-02")
+	if finishedAt != nil {
+		dateStr = finishedAt.Format("2006-01-02")
+	}
+	filename := fmt.Sprintf("session_%s_%s.csv", sessionID.String(), dateStr)
+
+	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
+	w.WriteHeader(http.StatusOK)
+
+	// Write UTF-8 BOM for Excel compatibility.
+	_, _ = w.Write([]byte{0xEF, 0xBB, 0xBF})
+
+	cw := csv.NewWriter(w)
+	_ = cw.Write([]string{"participant_name", "question_text", "answer", "is_correct", "score", "response_time_ms"})
+
+	for _, a := range answers {
+		isCorrectStr := ""
+		if a.IsCorrect != nil {
+			if *a.IsCorrect {
+				isCorrectStr = "true"
+			} else {
+				isCorrectStr = "false"
+			}
+		}
+
+		answerStr := answerToString(a.Answer)
+
+		_ = cw.Write([]string{
+			a.ParticipantName,
+			a.QuestionText,
+			answerStr,
+			isCorrectStr,
+			strconv.Itoa(a.Score),
+			strconv.Itoa(a.ResponseTimeMs),
+		})
+	}
+
+	cw.Flush()
+}
+
+// answerToString converts a JSON answer value to a human-readable string.
+// Quoted JSON strings are unquoted; other JSON values are left as-is.
+func answerToString(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	var s string
+	if err := json.Unmarshal(raw, &s); err == nil {
+		return s
+	}
+	return string(raw)
 }

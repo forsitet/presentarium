@@ -64,6 +64,7 @@ type HistoryService interface {
 	GetSession(ctx context.Context, userID, sessionID uuid.UUID) (*SessionDetailResponse, error)
 	ListParticipants(ctx context.Context, userID, sessionID uuid.UUID) ([]ParticipantResultResponse, error)
 	ListAnswers(ctx context.Context, userID, sessionID uuid.UUID) ([]repository.AnswerExportRow, error)
+	ExportCSV(ctx context.Context, userID, sessionID uuid.UUID) ([]repository.AnswerExportRow, *time.Time, error)
 }
 
 type historyService struct {
@@ -215,4 +216,19 @@ func (s *historyService) ListAnswers(ctx context.Context, userID, sessionID uuid
 		return nil, errs.ErrForbidden
 	}
 	return s.answerRepo.ListExportBySession(ctx, sessionID)
+}
+
+func (s *historyService) ExportCSV(ctx context.Context, userID, sessionID uuid.UUID) ([]repository.AnswerExportRow, *time.Time, error) {
+	row, err := s.sessionRepo.GetByIDWithPoll(ctx, sessionID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if row.PollUserID != userID {
+		return nil, nil, errs.ErrForbidden
+	}
+	answers, err := s.answerRepo.ListExportBySession(ctx, sessionID)
+	if err != nil {
+		return nil, nil, err
+	}
+	return answers, row.FinishedAt, nil
 }

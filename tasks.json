@@ -714,7 +714,7 @@
         "Шаг 5: GET с токеном чужого организатора → 403"
       ],
       "dependencies": ["TASK-028"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-031",
