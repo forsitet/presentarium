@@ -126,6 +126,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 				r.Get("/{id}", sessionH.handleGet)
 				r.Get("/{id}/participants", sessionH.handleListParticipants)
 				r.Get("/{id}/answers", sessionH.handleListAnswers)
+				r.Get("/{id}/export/csv", sessionH.handleExportCSV)
 			})
 		})
 	})

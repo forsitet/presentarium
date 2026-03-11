@@ -171,7 +171,7 @@ func (r *postgresAnswerRepo) ListExportBySession(ctx context.Context, sessionID 
 		 FROM answers a
 		 JOIN participants pt ON pt.id = a.participant_id
 		 JOIN questions q    ON q.id  = a.question_id
-		 WHERE a.session_id = $1
+		 WHERE a.session_id = $1 AND a.is_hidden = false
 		 ORDER BY pt.name ASC, q.position ASC`,
 		sessionID)
 	if err != nil {
