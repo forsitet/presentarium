@@ -588,3 +588,35 @@
 - TASK-027 (manual moderation backend) — medium, all deps done
 - TASK-023 (frontend word cloud) — medium, all deps done
 - TASK-025 (frontend brainstorm UI) — medium, all deps done
+
+---
+
+## TASK-034: Frontend participant finish/results screens with animations — DONE (2025-12-18)
+
+### What was done:
+- Added custom CSS keyframe animations to `frontend/src/index.css`:
+  - `float-up`: for the floating "+N очков" score popup (rises and fades out)
+  - `fade-in-up`: smooth entry animation for screen transitions
+  - `score-pop`: elastic scale-in for score badge reveal
+  - `slide-up-stagger`: for staggered answer option reveals and leaderboard rows
+  - `podium-rise`: scale-from-bottom for podium bars
+- Enhanced `frontend/src/pages/ParticipantSessionPage.tsx`:
+  - **ScorePopup component**: floating `+N очков` overlay that animates up and disappears after 1.6s; triggered on `answer_accepted` only when score > 0; uses a `key` counter to re-trigger animation on each new score
+  - **screenKey**: increments on question_start / question_end / session_end to force re-mount of screens, triggering entry animations
+  - **totalParticipants**: tracked from `leaderboard` and `session_end` WS events; shown as "из N" in rank display ("Вы на 3 месте из 10")
+  - **ResultsScreen**: options now reveal with staggered `animationDelay` per option; score badge has `animate-score-pop`; rank section shows total count; whole screen fades in
+  - **FinalScreen**: trophy/title/rank/podium/list all have staggered `animationDelay`; podium bars use `podium-bar` CSS class with `transform-origin: bottom`; medal emojis (🥇🥈🥉) replace number in leaderboard top-3; "Back to main" also fades in delayed
+  - **showing_question screen**: timer turns red + pulses when ≤ 5 seconds; "Ответ принят!" overlay uses `animate-score-pop`; `overflow-hidden` + `relative` for correct popup containment
+  - **Timer urgency**: countdown number changes class to `text-red-300 animate-pulse` when ≤ 5s remaining
+
+### Files changed:
+- frontend/src/index.css (5 new @keyframe animations + 5 utility classes)
+- frontend/src/pages/ParticipantSessionPage.tsx (ScorePopup, screenKey, totalParticipants, staggered animations throughout)
+- tasks.json (TASK-034 status → done)
+
+### Notes for next iteration:
+- TASK-046 (E2E full scenario, HIGH) — now unblocked (deps: TASK-030 ✓, TASK-029 ✓, TASK-034 ✓)
+- TASK-043 (participant history localStorage) — now unblocked (deps: TASK-028 ✓, TASK-034 ✓)
+- TASK-023 (frontend word cloud) — medium, all deps done
+- TASK-025 (frontend brainstorm UI) — medium, all deps done
+- TASK-033 (real-time stats organizer) — medium, all deps done

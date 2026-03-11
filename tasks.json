@@ -803,7 +803,7 @@
         "Шаг 5: топ-3 выделен на финальном экране"
       ],
       "dependencies": ["TASK-021", "TASK-019"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-035",
