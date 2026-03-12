@@ -27,6 +27,9 @@ type Config struct {
 	// CORS
 	CORSAllowedOrigin string `env:"CORS_ALLOWED_ORIGIN" envDefault:"http://localhost:5173"`
 
+	// App public base URL (used in emails)
+	AppBaseURL string `env:"APP_BASE_URL" envDefault:"http://localhost:5173"`
+
 	// Uploads
 	UploadsDir string `env:"UPLOADS_DIR" envDefault:"./uploads"`
 

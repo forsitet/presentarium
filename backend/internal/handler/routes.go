@@ -29,6 +29,7 @@ type RouterDeps struct {
 	RefreshTokenTTLDays int
 	UploadsDir          string
 	CORSAllowedOrigin   string
+	AppBaseURL          string
 }
 
 // NewRouter creates and configures the HTTP router.
@@ -74,7 +75,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 		deps.WSHandler.SetMessageHandler(deps.ConductService.HandleMessage)
 	}
 
-	authH := newAuthHandler(deps.AuthService, deps.RefreshTokenTTLDays)
+	authH := newAuthHandler(deps.AuthService, deps.RefreshTokenTTLDays, deps.AppBaseURL)
 	pollH := newPollHandler(deps.PollService)
 	questionH := newQuestionHandler(deps.QuestionService)
 	roomH := newRoomHandler(deps.RoomService, deps.ConductService)
@@ -90,6 +91,8 @@ func NewRouter(deps RouterDeps) http.Handler {
 			r.Post("/login", authH.handleLogin)
 			r.Post("/refresh", authH.handleRefresh)
 			r.Post("/logout", authH.handleLogout)
+			r.Post("/forgot-password", authH.handleForgotPassword)
+			r.Post("/reset-password", authH.handleResetPassword)
 		})
 
 		// Protected routes (JWT required)

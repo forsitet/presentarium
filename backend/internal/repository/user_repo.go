@@ -23,6 +23,11 @@ type UserRepository interface {
 	GetRefreshToken(ctx context.Context, token string) (*model.RefreshToken, error)
 	DeleteRefreshToken(ctx context.Context, token string) error
 	DeleteExpiredRefreshTokens(ctx context.Context, before time.Time) error
+	// Password reset
+	CreatePasswordResetToken(ctx context.Context, prt *model.PasswordResetToken) error
+	GetPasswordResetToken(ctx context.Context, token string) (*model.PasswordResetToken, error)
+	MarkPasswordResetTokenUsed(ctx context.Context, token string, usedAt time.Time) error
+	UpdateUserPassword(ctx context.Context, userID uuid.UUID, newHash string) error
 }
 
 type postgresUserRepo struct {
@@ -98,5 +103,50 @@ func (r *postgresUserRepo) DeleteRefreshToken(ctx context.Context, token string)
 
 func (r *postgresUserRepo) DeleteExpiredRefreshTokens(ctx context.Context, before time.Time) error {
 	_, err := r.db.ExecContext(ctx, "DELETE FROM refresh_tokens WHERE expires_at < $1", before)
+	return err
+}
+
+func (r *postgresUserRepo) CreatePasswordResetToken(ctx context.Context, prt *model.PasswordResetToken) error {
+	query := `INSERT INTO password_reset_tokens (id, user_id, token, expires_at, created_at)
+	          VALUES (:id, :user_id, :token, :expires_at, :created_at)`
+	_, err := r.db.NamedExecContext(ctx, query, prt)
+	return err
+}
+
+func (r *postgresUserRepo) GetPasswordResetToken(ctx context.Context, token string) (*model.PasswordResetToken, error) {
+	var prt model.PasswordResetToken
+	err := r.db.GetContext(ctx, &prt, "SELECT * FROM password_reset_tokens WHERE token = $1", token)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, errs.ErrNotFound
+		}
+		return nil, err
+	}
+	return &prt, nil
+}
+
+func (r *postgresUserRepo) MarkPasswordResetTokenUsed(ctx context.Context, token string, usedAt time.Time) error {
+	res, err := r.db.ExecContext(ctx,
+		"UPDATE password_reset_tokens SET used_at = $1 WHERE token = $2 AND used_at IS NULL",
+		usedAt, token,
+	)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return errs.ErrNotFound
+	}
+	return nil
+}
+
+func (r *postgresUserRepo) UpdateUserPassword(ctx context.Context, userID uuid.UUID, newHash string) error {
+	_, err := r.db.ExecContext(ctx,
+		"UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2",
+		newHash, userID,
+	)
 	return err
 }

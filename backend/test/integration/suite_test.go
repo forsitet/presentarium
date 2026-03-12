@@ -117,7 +117,7 @@ func buildTestServer(t *testing.T) *testServer {
 	answerRepo := repository.NewPostgresAnswerRepo(db)
 	brainstormRepo := repository.NewPostgresBrainstormRepo(db)
 
-	authSvc := service.NewAuthService(userRepo, testJWTSecret, 60, 7)
+	authSvc := service.NewAuthService(userRepo, testJWTSecret, 60, 7, nil)
 	pollSvc := service.NewPollService(pollRepo)
 	questionSvc := service.NewQuestionService(questionRepo, pollRepo)
 
@@ -144,6 +144,7 @@ func buildTestServer(t *testing.T) *testServer {
 		RefreshTokenTTLDays: 7,
 		UploadsDir:          t.TempDir(),
 		CORSAllowedOrigin:   "*",
+		AppBaseURL:          "http://localhost:5173",
 	})
 
 	srv := httptest.NewServer(router)

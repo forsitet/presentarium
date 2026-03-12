@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -12,6 +13,7 @@ import (
 	"presentarium/internal/errs"
 	"presentarium/internal/model"
 	"presentarium/internal/repository"
+	"presentarium/pkg/email"
 )
 
 // TokenPair holds an access token and a refresh token string.
@@ -26,6 +28,8 @@ type AuthService interface {
 	Login(ctx context.Context, email, password string) (*TokenPair, *model.User, error)
 	Refresh(ctx context.Context, refreshToken string) (*TokenPair, error)
 	Logout(ctx context.Context, refreshToken string) error
+	ForgotPassword(ctx context.Context, userEmail, appBaseURL string) error
+	ResetPassword(ctx context.Context, token, newPassword string) error
 }
 
 type authClaims struct {
@@ -38,6 +42,7 @@ type authService struct {
 	jwtSecret       []byte
 	accessTokenTTL  time.Duration
 	refreshTokenTTL time.Duration
+	emailSender     *email.Sender
 }
 
 // NewAuthService creates a new AuthService.
@@ -46,12 +51,14 @@ func NewAuthService(
 	jwtSecret string,
 	accessTokenTTLMin int,
 	refreshTokenTTLDays int,
+	emailSender *email.Sender,
 ) AuthService {
 	return &authService{
 		userRepo:        userRepo,
 		jwtSecret:       []byte(jwtSecret),
 		accessTokenTTL:  time.Duration(accessTokenTTLMin) * time.Minute,
 		refreshTokenTTL: time.Duration(refreshTokenTTLDays) * 24 * time.Hour,
+		emailSender:     emailSender,
 	}
 }
 
@@ -136,6 +143,68 @@ func (s *authService) Logout(ctx context.Context, refreshToken string) error {
 		return nil
 	}
 	return s.userRepo.DeleteRefreshToken(ctx, refreshToken)
+}
+
+// ForgotPassword generates a reset token and sends an email. Always returns nil to avoid
+// leaking whether an account exists for the given email address.
+func (s *authService) ForgotPassword(ctx context.Context, userEmail, appBaseURL string) error {
+	user, err := s.userRepo.GetUserByEmail(ctx, userEmail)
+	if err != nil {
+		// Don't reveal whether the email exists — silently succeed.
+		return nil
+	}
+
+	now := time.Now().UTC()
+	prt := &model.PasswordResetToken{
+		ID:        uuid.New(),
+		UserID:    user.ID,
+		Token:     uuid.NewString(),
+		ExpiresAt: now.Add(time.Hour),
+		CreatedAt: now,
+	}
+	if err := s.userRepo.CreatePasswordResetToken(ctx, prt); err != nil {
+		return err
+	}
+
+	resetLink := fmt.Sprintf("%s/reset-password?token=%s", appBaseURL, prt.Token)
+	body := "Вы запросили сброс пароля для вашего аккаунта.\n\n" +
+		"Перейдите по ссылке для сброса пароля (ссылка действительна 1 час):\n\n" +
+		resetLink + "\n\n" +
+		"Если вы не запрашивали сброс пароля, просто проигнорируйте это письмо."
+
+	// Send email (ignore error — SMTP may not be configured in dev).
+	_ = s.emailSender.Send(userEmail, "Сброс пароля — Presentarium", body)
+	return nil
+}
+
+// ResetPassword validates the reset token and updates the user's password.
+func (s *authService) ResetPassword(ctx context.Context, token, newPassword string) error {
+	prt, err := s.userRepo.GetPasswordResetToken(ctx, token)
+	if err != nil {
+		return errs.ErrNotFound
+	}
+
+	if prt.UsedAt != nil {
+		return errs.ErrValidation
+	}
+	if time.Now().UTC().After(prt.ExpiresAt) {
+		return errs.ErrValidation
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), 12)
+	if err != nil {
+		return err
+	}
+
+	now := time.Now().UTC()
+	if err := s.userRepo.MarkPasswordResetTokenUsed(ctx, token, now); err != nil {
+		if errors.Is(err, errs.ErrNotFound) {
+			return errs.ErrValidation // race condition — already used
+		}
+		return err
+	}
+
+	return s.userRepo.UpdateUserPassword(ctx, prt.UserID, string(hash))
 }
 
 // issueTokenPair generates a new JWT access token and persists a new refresh token.

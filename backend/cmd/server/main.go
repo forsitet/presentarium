@@ -16,6 +16,7 @@ import (
 	"presentarium/internal/service"
 	"presentarium/internal/ws"
 	"presentarium/pkg/badwords"
+	"presentarium/pkg/email"
 )
 
 func main() {
@@ -53,11 +54,17 @@ func main() {
 	answerRepo := repository.NewPostgresAnswerRepo(db)
 	brainstormRepo := repository.NewPostgresBrainstormRepo(db)
 
+	emailSender := email.NewSender(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUser, cfg.SMTPPassword, cfg.SMTPFrom)
+	if emailSender == nil {
+		slog.Warn("SMTP not configured — password reset emails will not be sent")
+	}
+
 	authSvc := service.NewAuthService(
 		userRepo,
 		cfg.JWTSecret,
 		cfg.JWTAccessTokenTTL,
 		cfg.JWTRefreshTokenTTL,
+		emailSender,
 	)
 	pollSvc := service.NewPollService(pollRepo)
 	questionSvc := service.NewQuestionService(questionRepo, pollRepo)
@@ -85,6 +92,7 @@ func main() {
 		RefreshTokenTTLDays: cfg.JWTRefreshTokenTTL,
 		UploadsDir:          cfg.UploadsDir,
 		CORSAllowedOrigin:   cfg.CORSAllowedOrigin,
+		AppBaseURL:          cfg.AppBaseURL,
 	})
 
 	addr := fmt.Sprintf("%s:%s", cfg.ServerHost, cfg.ServerPort)
