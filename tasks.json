@@ -1023,7 +1023,7 @@
         "Шаг 6: повторно использовать тот же токен → 400"
       ],
       "dependencies": ["TASK-005"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-045",

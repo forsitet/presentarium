@@ -19,13 +19,15 @@ type authHandler struct {
 	authSvc         service.AuthService
 	validate        *validator.Validate
 	refreshTokenTTL time.Duration
+	appBaseURL      string
 }
 
-func newAuthHandler(authSvc service.AuthService, refreshTokenTTLDays int) *authHandler {
+func newAuthHandler(authSvc service.AuthService, refreshTokenTTLDays int, appBaseURL string) *authHandler {
 	return &authHandler{
 		authSvc:         authSvc,
 		validate:        validator.New(),
 		refreshTokenTTL: time.Duration(refreshTokenTTLDays) * 24 * time.Hour,
+		appBaseURL:      appBaseURL,
 	}
 }
 
@@ -133,6 +135,58 @@ func (h *authHandler) handleLogout(w http.ResponseWriter, r *http.Request) {
 	}
 	h.clearRefreshCookie(w)
 	w.WriteHeader(http.StatusOK)
+}
+
+// forgotPasswordRequest is the JSON body for POST /api/auth/forgot-password.
+type forgotPasswordRequest struct {
+	Email string `json:"email" validate:"required,email"`
+}
+
+func (h *authHandler) handleForgotPassword(w http.ResponseWriter, r *http.Request) {
+	var req forgotPasswordRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	req.Email = strings.TrimSpace(strings.ToLower(req.Email))
+	if err := h.validate.Struct(req); err != nil {
+		// Always return 200 — don't reveal whether the email exists.
+		writeJSON(w, http.StatusOK, map[string]string{"message": "if the email exists, a reset link has been sent"})
+		return
+	}
+
+	// Ignore error — always 200 to avoid account enumeration.
+	_ = h.authSvc.ForgotPassword(r.Context(), req.Email, h.appBaseURL)
+	writeJSON(w, http.StatusOK, map[string]string{"message": "if the email exists, a reset link has been sent"})
+}
+
+// resetPasswordRequest is the JSON body for POST /api/auth/reset-password.
+type resetPasswordRequest struct {
+	Token       string `json:"token"        validate:"required"`
+	NewPassword string `json:"new_password" validate:"required,min=8"`
+}
+
+func (h *authHandler) handleResetPassword(w http.ResponseWriter, r *http.Request) {
+	var req resetPasswordRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if err := h.validate.Struct(req); err != nil {
+		writeValidationError(w, err)
+		return
+	}
+
+	if err := h.authSvc.ResetPassword(r.Context(), req.Token, req.NewPassword); err != nil {
+		if errors.Is(err, errs.ErrNotFound) || errors.Is(err, errs.ErrValidation) {
+			writeError(w, http.StatusBadRequest, "invalid or expired reset token")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "password reset failed")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"message": "password updated successfully"})
 }
 
 func (h *authHandler) setRefreshCookie(w http.ResponseWriter, token string) {

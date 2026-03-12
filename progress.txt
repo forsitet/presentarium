@@ -939,7 +939,55 @@
 - tasks.json (TASK-045 status → done)
 
 ### Notes for next iteration:
-- TASK-044 (password recovery email, medium) — deps done; needs SMTP config + email sending library
+- TASK-044 ✓ DONE — password recovery implemented
 - TASK-037 (Docker multi-stage prod, medium) — deps done; verify backend image < 30 MB
 - TASK-031 (PDF export, low) — deps done; needs gofpdf library
 - TASK-042 (animations UX polish, low) — deps done
+
+---
+
+## TASK-044: Backend password recovery via email — DONE (2026-01-15)
+
+### What was done:
+- Created `backend/migrations/000005_create_password_reset_tokens.up.sql`:
+  - `password_reset_tokens` table: id UUID, user_id FK → users, token TEXT UNIQUE, expires_at, used_at (nullable), created_at
+  - Indexes on token and user_id
+- Added `PasswordResetToken` model to `backend/internal/model/model.go`
+- Extended `UserRepository` interface with 4 new methods:
+  - `CreatePasswordResetToken`, `GetPasswordResetToken`, `MarkPasswordResetTokenUsed`, `UpdateUserPassword`
+  - Implementations use atomic UPDATE for `MarkPasswordResetTokenUsed` (handles race condition)
+- Created `backend/pkg/email/smtp.go`:
+  - `Sender` struct wrapping `net/smtp`
+  - `NewSender(host, port, user, password, from) *Sender` — returns nil if host is empty (SMTP disabled)
+  - `Send(to, subject, body)` handles nil receiver gracefully (logs error, no panic)
+- Extended `AuthService` interface with `ForgotPassword` and `ResetPassword`:
+  - `ForgotPassword`: generates token (UUID), saves to DB, sends email; always returns nil (account enumeration prevention)
+  - `ResetPassword`: validates token (not used, not expired), bcrypt hashes new password, atomically marks token used, updates password
+- Updated `NewAuthService` to accept `*email.Sender` parameter
+- Added `handleForgotPassword` and `handleResetPassword` to `authHandler`
+- Added `AppBaseURL` to `RouterDeps` and `Config` (env: APP_BASE_URL, default: http://localhost:5173)
+- Wired two new public routes in `/api/auth/` group (inside rate limiter):
+  - `POST /api/auth/forgot-password`
+  - `POST /api/auth/reset-password`
+- Updated test files to pass `nil` email sender and new AppBaseURL field
+
+### Files changed:
+- backend/migrations/000005_create_password_reset_tokens.up.sql (new)
+- backend/migrations/000005_create_password_reset_tokens.down.sql (new)
+- backend/internal/model/model.go (PasswordResetToken struct)
+- backend/internal/repository/user_repo.go (4 new methods + interface extension)
+- backend/pkg/email/smtp.go (new)
+- backend/internal/service/auth_service.go (ForgotPassword, ResetPassword, emailSender field)
+- backend/internal/config/config.go (AppBaseURL field)
+- backend/internal/handler/auth_handler.go (handleForgotPassword, handleResetPassword, appBaseURL field)
+- backend/internal/handler/routes.go (AppBaseURL in RouterDeps, 2 new routes)
+- backend/cmd/server/main.go (email.NewSender, pass emailSender + AppBaseURL)
+- backend/test/e2e/quiz_scenario_test.go (update NewAuthService + RouterDeps calls)
+- backend/test/integration/suite_test.go (update NewAuthService + RouterDeps calls)
+- tasks.json (TASK-044 status → done)
+
+### Notes for next iteration:
+- TASK-037 (Docker multi-stage prod, medium) — all deps done
+- TASK-031 (PDF export, low) — needs gofpdf library
+- TASK-042 (animations UX polish, low) — deps done
+- TASK-038 (CI/CD GitHub Actions, low) — depends on TASK-037
