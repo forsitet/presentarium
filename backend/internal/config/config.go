@@ -33,6 +33,9 @@ type Config struct {
 	// Uploads
 	UploadsDir string `env:"UPLOADS_DIR" envDefault:"./uploads"`
 
+	// Migrations
+	MigrationsPath string `env:"MIGRATIONS_PATH" envDefault:"migrations"`
+
 	// SMTP (optional)
 	SMTPHost     string `env:"SMTP_HOST"`
 	SMTPPort     int    `env:"SMTP_PORT" envDefault:"587"`

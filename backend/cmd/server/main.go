@@ -7,6 +7,9 @@ import (
 	"os"
 	"time"
 
+	"github.com/golang-migrate/migrate/v4"
+	migratepostgres "github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
 
@@ -45,6 +48,12 @@ func main() {
 	}
 	defer db.Close()
 	slog.Info("connected to database")
+
+	// Run database migrations automatically on startup.
+	if migrateErr := runMigrations(db, cfg.MigrationsPath); migrateErr != nil {
+		slog.Error("migrations failed", "error", migrateErr)
+		os.Exit(1)
+	}
 
 	userRepo := repository.NewPostgresUserRepo(db)
 	pollRepo := repository.NewPostgresPollRepo(db)
@@ -102,4 +111,20 @@ func main() {
 		slog.Error("server failed", "error", err)
 		os.Exit(1)
 	}
+}
+
+func runMigrations(db *sqlx.DB, migrationsPath string) error {
+	driver, err := migratepostgres.WithInstance(db.DB, &migratepostgres.Config{})
+	if err != nil {
+		return fmt.Errorf("create migrate driver: %w", err)
+	}
+	m, err := migrate.NewWithDatabaseInstance("file://"+migrationsPath, "postgres", driver)
+	if err != nil {
+		return fmt.Errorf("create migrator: %w", err)
+	}
+	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
+		return fmt.Errorf("apply migrations: %w", err)
+	}
+	slog.Info("migrations applied")
+	return nil
 }
