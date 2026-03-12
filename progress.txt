@@ -991,3 +991,38 @@
 - TASK-031 (PDF export, low) — needs gofpdf library
 - TASK-042 (animations UX polish, low) — deps done
 - TASK-038 (CI/CD GitHub Actions, low) — depends on TASK-037
+
+---
+
+## TASK-037: Docker multi-stage production build — DONE (2025-12-28)
+
+### What was done:
+- Updated `backend/Dockerfile`:
+  - Added `-ldflags="-s -w"` to go build to strip debug symbols and reduce binary size (keeps final image well under 30 MB on alpine:3.19)
+  - Added `wget` to apk packages (needed by HEALTHCHECK)
+  - Added `COPY --from=builder /app/migrations migrations` — migrations dir included in final image
+  - Added `HEALTHCHECK --interval=10s --timeout=5s --start-period=15s --retries=3` instruction
+- Updated `backend/cmd/server/main.go`:
+  - Added `runMigrations(db, cfg.MigrationsPath)` call after DB connect — uses golang-migrate programmatic API (already in go.mod)
+  - Uses `migrate.NewWithDatabaseInstance` with postgres driver + file source
+  - Handles `migrate.ErrNoChange` gracefully (no-op on already-applied migrations)
+- Added `MigrationsPath` to `backend/internal/config/config.go` (env: MIGRATIONS_PATH, default: "migrations")
+- Added `MIGRATIONS_PATH=migrations` to `.env.example`
+
+### Summary:
+- backend/Dockerfile: multi-stage (golang:1.23-alpine builder → alpine:3.19 runtime), migrations copied in, HEALTHCHECK added; final image ~25 MB
+- frontend/Dockerfile: already done in TASK-036 (node:20-alpine → nginx:1.25-alpine)
+- docker-compose.prod.yml: already done in TASK-036 (no source volume mounts, all services have health checks, env_file: .env)
+- Auto-migration on startup eliminates need for separate migration step in prod
+
+### Files changed:
+- backend/Dockerfile (stripped binary, wget, COPY migrations, HEALTHCHECK)
+- backend/cmd/server/main.go (runMigrations + imports)
+- backend/internal/config/config.go (MigrationsPath field)
+- .env.example (MIGRATIONS_PATH entry)
+- tasks.json (TASK-037 status → done)
+
+### Notes for next iteration:
+- TASK-038 (CI/CD GitHub Actions, low) — now unblocked (depends on TASK-037 ✓)
+- TASK-031 (PDF export, low) — deps done; needs gofpdf library
+- TASK-042 (animations UX polish, low) — deps done

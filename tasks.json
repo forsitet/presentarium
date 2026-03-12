@@ -869,7 +869,7 @@
         "Шаг 4: docker compose -f docker-compose.prod.yml ps → все сервисы healthy (health check проходит)"
       ],
       "dependencies": ["TASK-036"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-038",
