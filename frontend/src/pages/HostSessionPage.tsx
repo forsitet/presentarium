@@ -100,6 +100,9 @@ export function HostSessionPage() {
   const [wordcloudWords, setWordcloudWords] = useState<WordCloudWord[]>([])
   const [hiddenWords, setHiddenWords] = useState<Set<string>>(new Set())
 
+  // Screen transition key — changes on each state/question transition to re-trigger CSS fade-in
+  const screenKey = `${roomStatus}-${activeQ?.question_id ?? ''}`
+
   const joinUrl = `${window.location.origin}/join/${code}`
 
   // Fetch questions once pollId is known
@@ -377,7 +380,7 @@ export function HostSessionPage() {
           </span>
         </div>
 
-        <div className="flex-1 flex items-center justify-center px-4 sm:px-6">
+        <div key={screenKey} className="flex-1 flex items-center justify-center px-4 sm:px-6 animate-fade-in-up">
           <div className="max-w-lg w-full text-center">
             <div className="text-4xl sm:text-5xl mb-4 sm:mb-6">✅</div>
             <h2 className="text-2xl sm:text-3xl font-bold mb-2">Опрос запущен!</h2>
@@ -446,7 +449,9 @@ export function HostSessionPage() {
                 style={{ width: `${timerPct}%` }}
               />
             </div>
-            <span className="text-white font-mono text-xl sm:text-2xl font-bold w-8 sm:w-10 text-right">
+            <span className={`font-mono text-xl sm:text-2xl font-bold w-8 sm:w-10 text-right ${
+              timer <= 5 ? 'text-red-400 animate-timer-urgent' : 'text-white'
+            }`}>
               {timer}
             </span>
           </div>
@@ -465,11 +470,11 @@ export function HostSessionPage() {
         </div>
 
         {/* Main content: question + live chart */}
-        <div className="flex-1 max-w-7xl mx-auto w-full px-3 sm:px-6 py-4 sm:py-8 grid grid-cols-1 lg:grid-cols-2 gap-5 sm:gap-8">
+        <div key={screenKey} className="flex-1 max-w-7xl mx-auto w-full px-3 sm:px-6 py-4 sm:py-8 grid grid-cols-1 lg:grid-cols-2 gap-5 sm:gap-8 animate-fade-in-up">
           {/* Left: question text + option tiles */}
           <div className="flex flex-col gap-4 sm:gap-5">
             <div className="bg-gray-800 rounded-2xl border border-gray-700 p-4 sm:p-8 flex items-center justify-center flex-1 min-h-[120px] sm:min-h-[180px]">
-              <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-white text-center leading-snug">
+              <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-white text-center leading-snug animate-question-in">
                 {activeQ.text}
               </p>
             </div>
@@ -479,7 +484,8 @@ export function HostSessionPage() {
                 {activeQ.options!.map((opt, i) => (
                   <div
                     key={i}
-                    className={`${OPTION_BG[i % OPTION_BG.length]} rounded-xl p-4 flex items-center gap-3`}
+                    className={`${OPTION_BG[i % OPTION_BG.length]} rounded-xl p-4 flex items-center gap-3 animate-slide-stagger`}
+                    style={{ animationDelay: `${i * 60}ms` }}
                   >
                     <span className="text-white text-xl font-bold">{OPTION_SHAPES[i]}</span>
                     <span className="text-white font-semibold text-sm leading-snug flex-1 line-clamp-2">
@@ -657,7 +663,7 @@ export function HostSessionPage() {
           </div>
         </div>
 
-        <div className="flex-1 max-w-7xl mx-auto w-full px-3 sm:px-6 py-4 sm:py-8 grid grid-cols-1 lg:grid-cols-2 gap-5 sm:gap-8">
+        <div key={screenKey} className="flex-1 max-w-7xl mx-auto w-full px-3 sm:px-6 py-4 sm:py-8 grid grid-cols-1 lg:grid-cols-2 gap-5 sm:gap-8 animate-fade-in-up">
           {/* Left: question text + chart */}
           <div className="flex flex-col gap-5">
             <div className="bg-gray-800 rounded-2xl border border-gray-700 p-6">
@@ -675,13 +681,14 @@ export function HostSessionPage() {
                     {displayOptions.map((opt, i) => (
                       <div
                         key={i}
-                        className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm ${
+                        className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm animate-slide-stagger ${
                           revealedOptions
                             ? opt.is_correct
                               ? 'bg-green-900/40 border border-green-700 text-green-300'
                               : 'bg-gray-700/40 text-gray-400'
                             : 'bg-gray-700/50 text-gray-300'
                         }`}
+                        style={{ animationDelay: `${i * 80}ms` }}
                       >
                         {revealedOptions && (
                           <span className="font-bold">{opt.is_correct ? '✓' : '✗'}</span>
@@ -748,7 +755,7 @@ export function HostSessionPage() {
   if (roomStatus === 'finished') {
     return (
       <div className="min-h-screen bg-gray-900 text-white flex flex-col items-center justify-center px-4 sm:px-6 py-8 sm:py-12">
-        <div className="max-w-lg w-full text-center">
+        <div key={screenKey} className="max-w-lg w-full text-center animate-fade-in-up">
           <div className="text-5xl sm:text-6xl mb-4 sm:mb-6">🏆</div>
           <h2 className="text-2xl sm:text-3xl font-bold mb-2">Опрос завершён!</h2>
           <p className="text-gray-400 mb-6 sm:mb-8">Итоговые результаты</p>

@@ -1100,5 +1100,41 @@
 
 ### Notes for next iteration:
 - TASK-038 (CI/CD GitHub Actions, low) — all deps done (TASK-037 ✓); needs .github/workflows/deploy.yml
-- TASK-042 (animations UX polish, low) — all deps done (TASK-034 ✓, TASK-041 ✓)
+- TASK-042 ✓ DONE — animations UX polish implemented
 - All remaining tasks are low priority; project is functionally complete
+
+---
+
+## TASK-042: Frontend animations UX polish — DONE (2026-03-12)
+
+### What was done:
+- **Leaderboard.tsx**: Added `animate-slide-stagger` with 80ms staggered `animationDelay` per row; replaced numeric rank with medal emojis (🥇🥈🥉) for top 3
+- **HostSessionPage.tsx**:
+  - Added `screenKey = \`${roomStatus}-${activeQ?.question_id ?? ''}\`` that changes on every question/state transition
+  - Used `key={screenKey}` on main content divs for ACTIVE, SHOWING_QUESTION, SHOWING_RESULTS, FINISHED — forces React remount to re-trigger `animate-fade-in-up` CSS animation
+  - Option tiles in SHOWING_QUESTION now use `animate-slide-stagger` with 60ms stagger per option
+  - Question text in SHOWING_QUESTION uses `animate-question-in` (slide-in from right)
+  - Result options in SHOWING_RESULTS use `animate-slide-stagger` with 80ms stagger
+  - Finished screen content fades in via `animate-fade-in-up`
+  - Timer number turns `text-red-400 animate-timer-urgent` when ≤5 seconds remain
+- **index.css**: Added two new keyframe animations:
+  - `question-slide-in`: slides in from right (x: 32px → 0) with cubic-bezier spring easing
+  - `timer-pulse-urgent`: pulsing opacity for critical timer urgency
+  - Utility classes: `animate-question-in`, `animate-timer-urgent`
+
+### Already done in prior tasks (TASK-034, TASK-041):
+- Score popup (+N points float-up animation) ✓
+- Participant FinalScreen podium animations ✓
+- Staggered result screen reveals ✓
+- Timer green→yellow→red in both host and participant ✓
+- Skeleton loaders in Dashboard and PollResultsPage ✓
+- Toast notifications for export errors ✓
+
+### Files changed:
+- frontend/src/components/Leaderboard.tsx (staggered entry animations, medal emojis)
+- frontend/src/pages/HostSessionPage.tsx (screenKey transitions, question/option animations, timer urgency)
+- frontend/src/index.css (question-slide-in, timer-pulse-urgent keyframes + utility classes)
+- tasks.json (TASK-042 status → done)
+
+### Notes for next iteration:
+- TASK-038 (CI/CD GitHub Actions, low) — the only remaining pending task; requires GitHub secrets + VPS configuration
