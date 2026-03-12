@@ -6,7 +6,7 @@ const BASE_URL = import.meta.env.VITE_API_URL || '/api'
 
 export async function getPolls(): Promise<Poll[]> {
   const res = await apiClient.get<Poll[]>('/polls')
-  return res.data
+  return res.data ?? []
 }
 
 export async function deletePoll(id: string): Promise<void> {
@@ -45,7 +45,7 @@ export async function updatePoll(id: string, data: Partial<Poll>): Promise<Poll>
 
 export async function getQuestions(pollId: string): Promise<Question[]> {
   const res = await apiClient.get<Question[]>(`/polls/${pollId}/questions`)
-  return res.data
+  return res.data ?? []
 }
 
 export async function createQuestion(
@@ -83,7 +83,7 @@ export async function getRoomInfo(code: string): Promise<Session> {
 
 export async function getRoomParticipants(code: string): Promise<Participant[]> {
   const res = await apiClient.get<Participant[]>(`/rooms/${code}/participants`)
-  return res.data
+  return res.data ?? []
 }
 
 export async function changeRoomState(
@@ -95,7 +95,7 @@ export async function changeRoomState(
 
 export async function getSessions(): Promise<SessionSummary[]> {
   const res = await apiClient.get<SessionSummary[]>('/sessions')
-  return res.data
+  return res.data ?? []
 }
 
 export async function getSession(id: string): Promise<SessionDetail> {

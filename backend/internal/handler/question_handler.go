@@ -11,6 +11,7 @@ import (
 
 	"presentarium/internal/errs"
 	appmw "presentarium/internal/middleware"
+	"presentarium/internal/model"
 	"presentarium/internal/service"
 )
 
@@ -46,6 +47,9 @@ func (h *questionHandler) handleList(w http.ResponseWriter, r *http.Request) {
 		}
 		writeError(w, http.StatusInternalServerError, "failed to list questions")
 		return
+	}
+	if questions == nil {
+		questions = []*model.Question{}
 	}
 	writeJSON(w, http.StatusOK, questions)
 }
