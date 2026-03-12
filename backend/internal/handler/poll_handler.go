@@ -11,6 +11,7 @@ import (
 
 	"presentarium/internal/errs"
 	appmw "presentarium/internal/middleware"
+	"presentarium/internal/model"
 	"presentarium/internal/service"
 )
 
@@ -32,6 +33,9 @@ func (h *pollHandler) handleList(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to list polls")
 		return
+	}
+	if polls == nil {
+		polls = []*model.Poll{}
 	}
 	writeJSON(w, http.StatusOK, polls)
 }
