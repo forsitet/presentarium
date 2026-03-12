@@ -89,7 +89,7 @@ export function BrainstormBoard({
     })
   }
 
-  const visibleIdeas = ideas.filter((i) => !i.is_hidden)
+
   const hiddenIdeas = ideas.filter((i) => i.is_hidden)
   const sortedResults =
     phase === 'results'
