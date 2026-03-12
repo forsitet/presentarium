@@ -1138,3 +1138,28 @@
 
 ### Notes for next iteration:
 - TASK-038 (CI/CD GitHub Actions, low) — the only remaining pending task; requires GitHub secrets + VPS configuration
+
+---
+
+## TASK-038: CI/CD GitHub Actions pipeline — DONE (2026-03-09)
+
+### What was done:
+- Created `.github/workflows/deploy.yml` with two jobs:
+  - **build**: checkout → go build ./... → go vet ./... → go test ./... → npm ci → npm run build
+    - Uses actions/setup-go@v5 with go 1.23 and go.sum cache
+    - Uses actions/setup-node@v4 with node 20 and npm cache
+    - Deploy job only runs if build job succeeds (needs: build)
+  - **deploy**: SSH into VPS via appleboy/ssh-action@v1.0.3
+    - git pull origin master
+    - docker compose -f docker-compose.prod.yml pull
+    - docker compose -f docker-compose.prod.yml up -d --build
+    - Reads VPS_HOST, VPS_USER, VPS_SSH_KEY from GitHub Secrets
+
+### Files changed:
+- .github/workflows/deploy.yml (new)
+- tasks.json (TASK-038 status → done)
+
+### Notes for next iteration:
+- All 46 tasks are now DONE — project is complete!
+- To enable deployment: add VPS_HOST, VPS_USER, VPS_SSH_KEY to GitHub repository secrets
+- The deploy script assumes the repo is checked out at /opt/presentarium on the VPS

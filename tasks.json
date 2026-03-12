@@ -890,7 +890,7 @@
         "Шаг 4: после успешного деплоя — приложение обновлено на VPS"
       ],
       "dependencies": ["TASK-037"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "TASK-039",
