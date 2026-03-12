@@ -96,11 +96,10 @@ EOF
             exit 0
         fi
         echo "Осталось задач: $remaining. Продолжаю..."
-        say -v Milena "Задача готова. Продолжаю работу."
     fi
 
     ((iteration++))
 done
 
-echo "Все задачи выполнены! Итераций: $((iteration-1))"
-say -v Milena "Хозяин, я сделалъ!"
+# echo "Все задачи выполнены! Итераций: $((iteration-1))"
+# say -v Milena "Хозяин, я сделалъ!"

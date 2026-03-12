@@ -69,8 +69,8 @@ export function PollEditorPage() {
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null)
 
   // Refs for debounce
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>()
-  const saveStatusRef = useRef<ReturnType<typeof setTimeout>>()
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const saveStatusRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const pollCreatedRef = useRef(false)
 
   // Cleanup timers

@@ -40,7 +40,7 @@ export function QuestionEditorPanel(props: QuestionEditorPanelProps) {
   const [points, setPoints] = useState(question.points)
   const [options, setOptions] = useState<QuestionOption[]>(question.options ?? [])
   const [saved, setSaved] = useState(false)
-  const savedTimerRef = useRef<ReturnType<typeof setTimeout>>()
+  const savedTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
   // Reset local state when the selected question changes
   useEffect(() => {
