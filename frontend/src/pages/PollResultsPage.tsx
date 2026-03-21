@@ -141,7 +141,7 @@ export function PollResultsPage() {
                 <div className="text-xs text-gray-500 mt-1">Средний балл</div>
               </div>
               <div className="bg-white rounded-xl border border-gray-100 p-4 text-center">
-                <div className="text-2xl font-bold text-indigo-600">{session.questions.length}</div>
+                <div className="text-2xl font-bold text-indigo-600">{(session.questions ?? []).length}</div>
                 <div className="text-xs text-gray-500 mt-1">Вопросов</div>
               </div>
             </div>
@@ -177,7 +177,7 @@ export function PollResultsPage() {
             </div>
 
             {/* Leaderboard */}
-            {session.leaderboard.length > 0 && (
+            {(session.leaderboard ?? []).length > 0 && (
               <div className="mb-8">
                 <div className="bg-gray-900 rounded-xl p-5">
                   <Leaderboard entries={session.leaderboard} title="Итоговый лидерборд" />
@@ -188,7 +188,7 @@ export function PollResultsPage() {
             {/* Per-question stats */}
             <h3 className="text-lg font-bold text-gray-800 mb-4">Статистика по вопросам</h3>
             <div className="space-y-4">
-              {session.questions.map((qStat, idx) => {
+              {(session.questions ?? []).map((qStat, idx) => {
                 const pollQuestion = questionMap.get(qStat.id)
                 const isChoice =
                   qStat.type === 'single_choice' ||

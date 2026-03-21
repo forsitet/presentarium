@@ -161,6 +161,9 @@ func (s *historyService) GetSession(ctx context.Context, userID, sessionID uuid.
 	if err != nil {
 		return nil, err
 	}
+	if leaderboard == nil {
+		leaderboard = []repository.LeaderboardRow{}
+	}
 
 	questions, err := s.questionRepo.ListByPoll(ctx, row.PollID)
 	if err != nil {

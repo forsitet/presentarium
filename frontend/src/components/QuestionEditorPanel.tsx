@@ -4,6 +4,7 @@ import type { Question, QuestionOption } from '../types'
 interface QuestionEditorPanelProps {
   question: Question
   pollId: string
+  scoringRule?: string
   onSave: (updated: Question) => void
   onDelete: () => void
 }
@@ -196,7 +197,7 @@ export function QuestionEditorPanel(props: QuestionEditorPanelProps) {
       </div>
 
       {/* Time limit and points */}
-      <div className="grid grid-cols-2 gap-4 mb-5">
+      <div className={`grid ${props.scoringRule !== 'none' ? 'grid-cols-2' : 'grid-cols-1'} gap-4 mb-5`}>
         <div>
           <label htmlFor="q-time" className="block text-sm font-medium text-gray-700 mb-1">
             Время (сек)
@@ -212,21 +213,23 @@ export function QuestionEditorPanel(props: QuestionEditorPanelProps) {
             className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
           />
         </div>
-        <div>
-          <label htmlFor="q-points" className="block text-sm font-medium text-gray-700 mb-1">
-            Баллы
-          </label>
-          <input
-            id="q-points"
-            type="number"
-            min={0}
-            max={10000}
-            value={points}
-            onChange={(e) => setPoints(Number(e.target.value))}
-            onBlur={handlePointsBlur}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-          />
-        </div>
+        {props.scoringRule !== 'none' && (
+          <div>
+            <label htmlFor="q-points" className="block text-sm font-medium text-gray-700 mb-1">
+              Баллы
+            </label>
+            <input
+              id="q-points"
+              type="number"
+              min={0}
+              max={10000}
+              value={points}
+              onChange={(e) => setPoints(Number(e.target.value))}
+              onBlur={handlePointsBlur}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            />
+          </div>
+        )}
       </div>
 
       {/* Options section */}
