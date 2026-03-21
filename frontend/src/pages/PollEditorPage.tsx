@@ -364,6 +364,18 @@ export function PollEditorPage() {
             </span>
           )}
           {saveStatus === 'idle' && <span className="w-28" />}
+          <button
+            onClick={() => {
+              if (debounceRef.current) {
+                clearTimeout(debounceRef.current)
+                savePollSettings(title, description, scoringRule, questionOrder)
+              }
+              navigate('/dashboard')
+            }}
+            className="px-4 py-1.5 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
+          >
+            Сохранить
+          </button>
         </div>
       </header>
 
@@ -537,6 +549,7 @@ export function PollEditorPage() {
                   key={selectedQuestion.id}
                   question={selectedQuestion}
                   pollId={pollId!}
+                  scoringRule={scoringRule}
                   onSave={handleSaveQuestion}
                   onDelete={() => setDeleteTargetId(selectedQuestion.id)}
                 />

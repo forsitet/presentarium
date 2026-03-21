@@ -16,9 +16,9 @@ export function PollCard({ poll, onEdit, onLaunch, onDelete, onCopy }: PollCardP
   })
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 flex flex-col gap-3 hover:shadow-md transition-shadow">
-      <div className="flex-1">
-        <h3 className="text-lg font-semibold text-gray-900 leading-snug">{poll.title}</h3>
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 flex flex-col gap-3 hover:shadow-md transition-shadow overflow-hidden">
+      <div className="flex-1 min-w-0">
+        <h3 className="text-lg font-semibold text-gray-900 leading-snug truncate">{poll.title}</h3>
         {poll.description && (
           <p className="mt-1 text-sm text-gray-500 line-clamp-2">{poll.description}</p>
         )}
