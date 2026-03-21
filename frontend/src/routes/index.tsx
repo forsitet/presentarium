@@ -11,20 +11,40 @@ function ProtectedRoute() {
 
 export { ProtectedRoute }
 
+/**
+ * Wrapper around dynamic import() that auto-reloads the page once
+ * when a chunk fails to load (stale deployment / cache mismatch).
+ */
+function lazyRetry<T>(factory: () => Promise<T>): () => Promise<T> {
+  return async () => {
+    try {
+      return await factory()
+    } catch (err) {
+      // Only reload once per session to avoid infinite reload loops.
+      const key = 'chunk-reload'
+      if (!sessionStorage.getItem(key)) {
+        sessionStorage.setItem(key, '1')
+        window.location.reload()
+      }
+      throw err
+    }
+  }
+}
+
 export const router = createBrowserRouter([
   {
     path: '/login',
-    lazy: async () => {
+    lazy: lazyRetry(async () => {
       const { LoginPage } = await import('../pages/LoginPage')
       return { Component: LoginPage }
-    },
+    }),
   },
   {
     path: '/register',
-    lazy: async () => {
+    lazy: lazyRetry(async () => {
       const { RegisterPage } = await import('../pages/RegisterPage')
       return { Component: RegisterPage }
-    },
+    }),
   },
   {
     path: '/',
@@ -36,68 +56,68 @@ export const router = createBrowserRouter([
       },
       {
         path: 'dashboard',
-        lazy: async () => {
+        lazy: lazyRetry(async () => {
           const { DashboardPage } = await import('../pages/DashboardPage')
           return { Component: DashboardPage }
-        },
+        }),
       },
       {
         path: 'polls/new',
-        lazy: async () => {
+        lazy: lazyRetry(async () => {
           const { PollEditorPage } = await import('../pages/PollEditorPage')
           return { Component: PollEditorPage }
-        },
+        }),
       },
       {
         path: 'polls/:id/edit',
-        lazy: async () => {
+        lazy: lazyRetry(async () => {
           const { PollEditorPage } = await import('../pages/PollEditorPage')
           return { Component: PollEditorPage }
-        },
+        }),
       },
       {
         path: 'host/:code',
-        lazy: async () => {
+        lazy: lazyRetry(async () => {
           const { HostSessionPage } = await import('../pages/HostSessionPage')
           return { Component: HostSessionPage }
-        },
+        }),
       },
       {
         path: 'sessions/:id',
-        lazy: async () => {
+        lazy: lazyRetry(async () => {
           const { PollResultsPage } = await import('../pages/PollResultsPage')
           return { Component: PollResultsPage }
-        },
+        }),
       },
     ],
   },
   {
     path: 'join',
-    lazy: async () => {
+    lazy: lazyRetry(async () => {
       const { JoinPage } = await import('../pages/JoinPage')
       return { Component: JoinPage }
-    },
+    }),
   },
   {
     path: 'join/:code',
-    lazy: async () => {
+    lazy: lazyRetry(async () => {
       const { JoinPage } = await import('../pages/JoinPage')
       return { Component: JoinPage }
-    },
+    }),
   },
   {
     path: 'session/:code',
-    lazy: async () => {
+    lazy: lazyRetry(async () => {
       const { ParticipantSessionPage } = await import('../pages/ParticipantSessionPage')
       return { Component: ParticipantSessionPage }
-    },
+    }),
   },
   {
     path: 'my-results',
-    lazy: async () => {
+    lazy: lazyRetry(async () => {
       const { MyResultsPage } = await import('../pages/MyResultsPage')
       return { Component: MyResultsPage }
-    },
+    }),
   },
   {
     path: '*',
