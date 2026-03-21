@@ -43,6 +43,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 	r.Use(chimw.Recoverer)
 
 	r.Get("/health", healthHandler)
+	r.Head("/health", healthHandler)
 
 	// Public participant history endpoint (no JWT required).
 	if deps.HistoryService != nil {

@@ -166,13 +166,15 @@ export function HostSessionPage() {
     }
   }, [code])
 
-  // WebSocket setup — runs once when code/token are known
+  // WebSocket setup — runs once when code/token are known.
+  // We wait until accessToken is available so the organizer connects with a JWT;
+  // connecting without it would fall back to "participant" role → 400.
   useEffect(() => {
-    if (!code) return
+    if (!code || !accessToken) return
 
     setRoom(code)
     getRoomParticipants(code).then(setParticipants).catch(() => {})
-    socket.connect(code, accessToken ?? undefined)
+    socket.connect(code, accessToken)
 
     const onParticipantJoined = (data: unknown) => addParticipant(data as Participant)
     const onParticipantLeft = (data: unknown) => {

@@ -72,6 +72,13 @@ export function PollEditorPage() {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const saveStatusRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const pollCreatedRef = useRef(false)
+  const pollIdRef = useRef<string | null>(id ?? null)
+  const creatingPollRef = useRef<Promise<string> | null>(null)
+
+  // Keep pollIdRef in sync with state
+  useEffect(() => {
+    pollIdRef.current = pollId
+  }, [pollId])
 
   // Cleanup timers
   useEffect(() => {
@@ -114,46 +121,70 @@ export function PollEditorPage() {
     return () => { cancelled = true }
   }, [id])
 
+  // Ensure poll exists, creating it if necessary. Uses a lock (creatingPollRef)
+  // so that concurrent callers (debounced save + add question) don't create
+  // duplicate polls.
+  const ensurePoll = useCallback(
+    async (t: string, desc: string, scoring: ScoringRule, order: QuestionOrder): Promise<string> => {
+      // Already created — return immediately
+      if (pollIdRef.current && pollCreatedRef.current) {
+        return pollIdRef.current
+      }
+      // Existing poll being edited (not new)
+      if (pollIdRef.current && !isNew) {
+        return pollIdRef.current
+      }
+      // Another caller is already creating — wait for it
+      if (creatingPollRef.current) {
+        return creatingPollRef.current
+      }
+      // Create the poll (with lock)
+      const promise = createPoll({
+        title: t.trim() || 'Новый опрос',
+        description: desc.trim() || undefined,
+        scoring_rule: scoring,
+        question_order: order,
+      }).then((poll) => {
+        pollIdRef.current = poll.id
+        setPollId(poll.id)
+        pollCreatedRef.current = true
+        window.history.replaceState(null, '', `/polls/${poll.id}/edit`)
+        creatingPollRef.current = null
+        return poll.id
+      }).catch((err) => {
+        creatingPollRef.current = null
+        throw err
+      })
+      creatingPollRef.current = promise
+      return promise
+    },
+    [isNew],
+  )
+
   // Auto-save poll settings with debounce
   const savePollSettings = useCallback(
     async (newTitle: string, newDesc: string, newScoring: ScoringRule, newOrder: QuestionOrder) => {
       if (!newTitle.trim()) return
 
       try {
-        if (pollId && !isNew) {
-          await updatePoll(pollId, {
+        const alreadyExisted = pollCreatedRef.current || !isNew
+        const currentId = await ensurePoll(newTitle, newDesc, newScoring, newOrder)
+        // Only update if the poll already existed before ensurePoll
+        // (ensurePoll already created it with these settings otherwise)
+        if (alreadyExisted) {
+          await updatePoll(currentId, {
             title: newTitle.trim(),
             description: newDesc.trim() || undefined,
             scoring_rule: newScoring,
             question_order: newOrder,
           })
-          flashSaveStatus('saved')
-        } else if (pollId && isNew && pollCreatedRef.current) {
-          await updatePoll(pollId, {
-            title: newTitle.trim(),
-            description: newDesc.trim() || undefined,
-            scoring_rule: newScoring,
-            question_order: newOrder,
-          })
-          flashSaveStatus('saved')
-        } else if (!pollId || !pollCreatedRef.current) {
-          const poll = await createPoll({
-            title: newTitle.trim(),
-            description: newDesc.trim() || undefined,
-            scoring_rule: newScoring,
-            question_order: newOrder,
-          })
-          setPollId(poll.id)
-          pollCreatedRef.current = true
-          flashSaveStatus('saved')
-          // Update URL without full navigation
-          window.history.replaceState(null, '', `/polls/${poll.id}/edit`)
         }
+        flashSaveStatus('saved')
       } catch {
         flashSaveStatus('error')
       }
     },
-    [pollId, isNew, flashSaveStatus],
+    [ensurePoll, isNew, flashSaveStatus],
   )
 
   const debouncedSave = useCallback(
@@ -190,27 +221,16 @@ export function PollEditorPage() {
   const handleAddQuestion = async (type: QuestionType) => {
     setShowTypeSelector(false)
 
-    // Ensure poll exists first
-    let currentPollId = pollId
-    if (!currentPollId || !pollCreatedRef.current) {
+    // Ensure poll exists first (uses lock to prevent duplicate creation)
+    let currentPollId: string
+    try {
       if (!title.trim()) {
         setTitle('Новый опрос')
       }
-      try {
-        const poll = await createPoll({
-          title: title.trim() || 'Новый опрос',
-          description: description.trim() || undefined,
-          scoring_rule: scoringRule,
-          question_order: questionOrder,
-        })
-        currentPollId = poll.id
-        setPollId(poll.id)
-        pollCreatedRef.current = true
-        window.history.replaceState(null, '', `/polls/${poll.id}/edit`)
-      } catch {
-        flashSaveStatus('error')
-        return
-      }
+      currentPollId = await ensurePoll(title || 'Новый опрос', description, scoringRule, questionOrder)
+    } catch {
+      flashSaveStatus('error')
+      return
     }
 
     const hasOptions = ['single_choice', 'multiple_choice', 'image_choice'].includes(type)

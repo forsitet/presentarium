@@ -9,14 +9,37 @@ class WSSocket {
   private roomCode = ''
   private token = ''
   private name = ''
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null
 
   connect(roomCode: string, token?: string, name?: string) {
+    // Close any existing connection before creating a new one.
+    this._closeExisting()
     this.roomCode = roomCode
     this.token = token || ''
     this.name = name || ''
     this.reconnectAttempts = 0
     this.maxReconnects = 5
     this._connect()
+  }
+
+  /** Close the current WebSocket without triggering reconnection. */
+  private _closeExisting() {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer)
+      this.reconnectTimer = null
+    }
+    if (this.ws) {
+      // Remove onclose to prevent reconnection from the old socket.
+      this.ws.onclose = null
+      this.ws.onmessage = null
+      if (
+        this.ws.readyState === WebSocket.OPEN ||
+        this.ws.readyState === WebSocket.CONNECTING
+      ) {
+        this.ws.close()
+      }
+      this.ws = null
+    }
   }
 
   private _connect() {
@@ -51,7 +74,10 @@ class WSSocket {
       if (this.reconnectAttempts < this.maxReconnects) {
         const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts)
         this.reconnectAttempts++
-        setTimeout(() => this._connect(), delay)
+        this.reconnectTimer = setTimeout(() => {
+          this.reconnectTimer = null
+          this._connect()
+        }, delay)
       }
     }
   }
@@ -74,7 +100,7 @@ class WSSocket {
 
   disconnect() {
     this.maxReconnects = 0
-    this.ws?.close()
+    this._closeExisting()
   }
 }
 
