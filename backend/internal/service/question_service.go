@@ -31,7 +31,7 @@ type QuestionService interface {
 // CreateQuestionRequest holds fields for creating a question.
 type CreateQuestionRequest struct {
 	Type             string                 `json:"type"               validate:"required,oneof=single_choice multiple_choice open_text image_choice word_cloud brainstorm"`
-	Text             string                 `json:"text"               validate:"required,max=500"`
+	Text             string                 `json:"text"               validate:"max=500"`
 	Options          []model.QuestionOption `json:"options"`
 	// TimeLimitSeconds=0 means "use default (30)"; non-zero values must be 5-300.
 	TimeLimitSeconds int `json:"time_limit_seconds" validate:"omitempty,min=5,max=300"`
@@ -112,9 +112,9 @@ func (s *questionService) Create(ctx context.Context, userID, pollID uuid.UUID, 
 	if err := s.verifyPollOwner(ctx, userID, pollID); err != nil {
 		return nil, err
 	}
-	if err := validateOptions(req.Type, req.Options); err != nil {
-		return nil, err
-	}
+	// Skip option validation on create — the question is a draft that will be
+	// filled in by the user via subsequent updates.
+
 
 	// Default time limit if not provided.
 	if req.TimeLimitSeconds == 0 {
