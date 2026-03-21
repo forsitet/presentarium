@@ -64,7 +64,7 @@ export function useExport(sessionId: string | undefined) {
     setCsvStatus('loading')
     setErrorMessage(null)
     try {
-      const response = await apiClient.get(`/api/sessions/${sessionId}/export/csv`, {
+      const response = await apiClient.get(`/sessions/${sessionId}/export/csv`, {
         responseType: 'blob',
       })
       const contentDisposition = response.headers['content-disposition'] as string | undefined
@@ -103,7 +103,7 @@ export function useExport(sessionId: string | undefined) {
       }
 
       const response = await apiClient.post(
-        `/api/sessions/${sessionId}/export/pdf`,
+        `/sessions/${sessionId}/export/pdf`,
         { charts },
         { responseType: 'blob' },
       )
