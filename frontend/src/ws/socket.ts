@@ -47,10 +47,10 @@ class WSSocket {
     const host = window.location.host
     const sessionToken = localStorage.getItem(`session_token_${this.roomCode}`) || ''
     const params = new URLSearchParams()
+    if (this.token) params.set('token', this.token)
     if (this.name) params.set('name', this.name)
     if (sessionToken) params.set('session_token', sessionToken)
-    const tokenParam = this.token ? `?token=${this.token}&${params}` : `?${params}`
-    this.ws = new WebSocket(`${proto}://${host}/ws/room/${this.roomCode}${tokenParam}`)
+    this.ws = new WebSocket(`${proto}://${host}/ws/room/${this.roomCode}?${params}`)
 
     this.ws.onmessage = (event) => {
       try {
