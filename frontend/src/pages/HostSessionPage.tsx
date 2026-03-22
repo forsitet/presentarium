@@ -107,15 +107,28 @@ export function HostSessionPage() {
 
   const joinUrl = `${window.location.origin}/join/${code}`
 
-  // If pollId is missing (tab was closed & reopened), fetch it from room info
+  // On mount: fetch room info to get pollId (if missing) and sync roomStatus
+  // This handles page refresh / tab reconnect scenarios.
   useEffect(() => {
-    if (pollId || !code) return
+    if (!code) return
     getRoomInfo(code)
-      .then((session) => {
-        if (session.poll_id) setPollId(session.poll_id)
+      .then((info) => {
+        if (!pollId && info.poll_id) setPollId(info.poll_id)
+        // Sync status so we don't show "waiting" when the room is already active
+        const validStatuses = ['waiting', 'active', 'showing_question', 'showing_results', 'finished'] as const
+        type RS = typeof validStatuses[number]
+        if (validStatuses.includes(info.status as RS)) {
+          // If the room is mid-question but we have no activeQ data, show as 'active'
+          // so the host can use "Показать вопрос" / "Завершить" buttons
+          const mapped = info.status === 'showing_question' ? 'active' : info.status as RS
+          if (roomStatus === 'waiting' && mapped !== 'waiting') {
+            setStatus(mapped)
+          }
+        }
       })
       .catch(() => {})
-  }, [pollId, code])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [code])
 
   // Fetch questions once pollId is known
   useEffect(() => {
