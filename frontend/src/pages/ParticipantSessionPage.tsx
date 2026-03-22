@@ -333,7 +333,7 @@ export function ParticipantSessionPage() {
 
         {/* Question text */}
         <div className="bg-white/10 backdrop-blur rounded-2xl p-4 sm:p-5 mb-4 sm:mb-6 text-center">
-          <p className="text-white text-lg sm:text-xl font-semibold leading-snug">{question.text}</p>
+          <p className="text-white text-lg sm:text-xl font-semibold leading-snug">{question.text || 'Вопрос...'}</p>
         </div>
 
         {/* Answer submitted overlay */}
@@ -449,7 +449,7 @@ function SingleChoiceInput({
             {opt.image_url ? (
               <img src={opt.image_url} alt={opt.text} className="h-10 object-contain mx-auto" />
             ) : (
-              <span className="flex-1 text-left leading-tight">{opt.text}</span>
+              <span className="flex-1 text-left leading-tight">{opt.text || `Вариант ${idx + 1}`}</span>
             )}
           </button>
         )
@@ -486,7 +486,7 @@ function MultipleChoiceInput({
               `}
             >
               <span className="text-xl opacity-70">{color.icon}</span>
-              <span className="flex-1 text-left leading-tight">{opt.text}</span>
+              <span className="flex-1 text-left leading-tight">{opt.text || `Вариант ${idx + 1}`}</span>
               {isSelected && <span className="text-white text-lg">✓</span>}
             </button>
           )
@@ -625,7 +625,7 @@ function ResultsScreen({
                 style={{ animationDelay: `${idx * 60}ms` }}
               >
                 <span className="text-lg opacity-70">{OPTION_COLORS[idx % OPTION_COLORS.length].icon}</span>
-                <span className="flex-1 text-sm leading-tight">{opt.text}</span>
+                <span className="flex-1 text-sm leading-tight">{opt.text || `Вариант ${idx + 1}`}</span>
                 {isCorrect && <span>✓</span>}
                 {wasSelected && !isCorrect && <span>✗</span>}
               </div>

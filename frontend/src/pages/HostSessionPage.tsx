@@ -4,7 +4,7 @@ import { QRCodeSVG } from 'qrcode.react'
 import { useAuthStore } from '../stores/authStore'
 import { useSessionStore } from '../stores/sessionStore'
 import { socket } from '../ws/socket'
-import { getRoomParticipants, changeRoomState, getQuestions } from '../api/polls'
+import { getRoomParticipants, changeRoomState, getQuestions, getRoomInfo } from '../api/polls'
 import { ParticipantList } from '../components/ParticipantList'
 import { AnswerBarChart } from '../components/AnswerBarChart'
 import { Leaderboard } from '../components/Leaderboard'
@@ -72,8 +72,10 @@ export function HostSessionPage() {
     setStatus,
   } = useSessionStore()
 
-  // pollId is passed from DashboardPage as location state
-  const pollId = (location.state as { pollId?: string } | null)?.pollId ?? null
+  // pollId may come from location state (normal flow) or fetched from API (reconnect)
+  const [pollId, setPollId] = useState<string | null>(
+    (location.state as { pollId?: string } | null)?.pollId ?? null,
+  )
 
   const [copied, setCopied] = useState(false)
   const [starting, setStarting] = useState(false)
@@ -104,6 +106,16 @@ export function HostSessionPage() {
   const screenKey = `${roomStatus}-${activeQ?.question_id ?? ''}`
 
   const joinUrl = `${window.location.origin}/join/${code}`
+
+  // If pollId is missing (tab was closed & reopened), fetch it from room info
+  useEffect(() => {
+    if (pollId || !code) return
+    getRoomInfo(code)
+      .then((session) => {
+        if (session.poll_id) setPollId(session.poll_id)
+      })
+      .catch(() => {})
+  }, [pollId, code])
 
   // Fetch questions once pollId is known
   useEffect(() => {
@@ -477,7 +489,7 @@ export function HostSessionPage() {
           <div className="flex flex-col gap-4 sm:gap-5">
             <div className="bg-gray-800 rounded-2xl border border-gray-700 p-4 sm:p-8 flex items-center justify-center flex-1 min-h-[120px] sm:min-h-[180px]">
               <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-white text-center leading-snug animate-question-in">
-                {activeQ.text}
+                {activeQ.text || 'Вопрос...'}
               </p>
             </div>
 
@@ -491,7 +503,7 @@ export function HostSessionPage() {
                   >
                     <span className="text-white text-xl font-bold">{OPTION_SHAPES[i]}</span>
                     <span className="text-white font-semibold text-sm leading-snug flex-1 line-clamp-2">
-                      {opt.text}
+                      {opt.text || `Вариант ${i + 1}`}
                     </span>
                   </div>
                 ))}

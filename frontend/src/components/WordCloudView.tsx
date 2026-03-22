@@ -1,3 +1,4 @@
+import { Component, type ReactNode } from 'react'
 import ReactWordcloud from 'react-wordcloud'
 
 interface WordEntry {
@@ -23,6 +24,50 @@ const WC_OPTIONS = {
   tooltipOptions: {},
 }
 
+/* ---------- Error Boundary for react-wordcloud ---------- */
+
+interface EBProps {
+  fallback: ReactNode
+  children: ReactNode
+}
+interface EBState {
+  hasError: boolean
+}
+
+class WordCloudErrorBoundary extends Component<EBProps, EBState> {
+  state: EBState = { hasError: false }
+
+  static getDerivedStateFromError(): EBState {
+    return { hasError: true }
+  }
+
+  render() {
+    if (this.state.hasError) return this.props.fallback
+    return this.props.children
+  }
+}
+
+/* ---------- Chip-based fallback when cloud crashes ---------- */
+
+function WordChipsFallback({ words }: { words: { text: string; value: number }[] }) {
+  return (
+    <div className="h-full flex flex-wrap items-center justify-center gap-2 p-4 overflow-y-auto">
+      {words.map((w) => (
+        <span
+          key={w.text}
+          className="px-3 py-1 rounded-full text-sm font-medium bg-indigo-600/30 text-indigo-200 border border-indigo-500/40"
+          style={{ fontSize: `${Math.min(12 + w.value * 2, 24)}px` }}
+        >
+          {w.text}
+          <span className="ml-1 opacity-60 text-xs">{w.value}</span>
+        </span>
+      ))}
+    </div>
+  )
+}
+
+/* ---------- Main component ---------- */
+
 export function WordCloudView({
   words,
   hiddenWords = new Set(),
@@ -31,7 +76,8 @@ export function WordCloudView({
 }: WordCloudViewProps) {
   const visibleWords = words
     .filter((w) => !hiddenWords.has(w.text))
-    .map((w) => ({ text: w.text, value: w.count }))
+    .map((w) => ({ text: w.text, value: Math.max(w.count, 1) })) // ensure positive values
+    .filter((w) => w.text.trim().length > 0) // filter out empty strings
 
   if (words.length === 0) {
     return (
@@ -46,11 +92,13 @@ export function WordCloudView({
       {/* Word cloud visualization */}
       <div className="h-64 w-full bg-gray-900 rounded-xl overflow-hidden">
         {visibleWords.length > 0 ? (
-          <ReactWordcloud
-            words={visibleWords}
-            options={WC_OPTIONS}
-            size={[560, 256]}
-          />
+          <WordCloudErrorBoundary fallback={<WordChipsFallback words={visibleWords} />}>
+            <ReactWordcloud
+              words={visibleWords}
+              options={WC_OPTIONS}
+              size={[560, 256]}
+            />
+          </WordCloudErrorBoundary>
         ) : (
           <div className="h-full flex items-center justify-center text-gray-500 text-sm">
             Все слова скрыты
