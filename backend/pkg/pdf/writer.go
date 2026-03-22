@@ -75,15 +75,19 @@ func (d *Doc) addFont(baseName string) int {
 	id := d.startObj()
 	// Encoding dictionary for CP1251 (Windows Cyrillic).
 	// We declare the Differences array starting at position 192 (0xC0) for А–я.
+	// Correct Windows-1251 (CP1251) encoding for PDF Type1 fonts.
+	// Positions 128-159 include Serbian/Macedonian Cyrillic + Western punctuation,
+	// positions 160-191 include Ukrainian/Belarusian Cyrillic + Latin symbols,
+	// positions 192-255 are the standard А–Я, а–я block.
 	enc := `/Type /Encoding /Differences [
- 128 /afii10051 /afii10052 /afii10053 /afii10054 /afii10055 /afii10056 /afii10057 /afii10058
-     /afii10059 /afii10060 /afii10061 /afii10062 /afii10145 /afii10063 /afii10064 /afii10065
- 144 /afii10066 /afii10067 /afii10068 /afii10069 /afii10070 /afii10072 /afii10073 /afii10074
-     /afii10075 /afii10076 /afii10077 /afii10078 /afii10079 /afii10080 /afii10081 /afii10082
- 160 /uni00A0 /afii10023 /afii10071 /afii10101 /uni00A4 /afii10103 /uni00A6 /uni00A7
-     /afii10023 /uni00A9 /afii10023 /uni00AB /uni00AC /uni00AD /uni00AE /afii10023
- 176 /uni00B0 /uni00B1 /afii10023 /afii10023 /afii10023 /uni00B5 /uni00B6 /uni00B7
-     /afii10023 /afii10023 /afii10023 /uni00BB /afii10023 /afii10023 /afii10023 /afii10023
+ 128 /afii10051 /afii10052 /quotesinglbase /afii10100 /quotedblbase /ellipsis /dagger /daggerdbl
+     /Euro /perthousand /afii10058 /guilsinglleft /afii10059 /afii10061 /afii10060 /afii10145
+ 144 /afii10099 /quoteleft /quoteright /quotedblleft /quotedblright /bullet /endash /emdash
+     /space /trademark /afii10106 /guilsinglright /afii10107 /afii10109 /afii10108 /afii10193
+ 160 /uni00A0 /afii10062 /afii10110 /afii10057 /uni00A4 /afii10050 /uni00A6 /uni00A7
+     /afii10023 /uni00A9 /afii10053 /uni00AB /uni00AC /uni00AD /uni00AE /afii10056
+ 176 /uni00B0 /uni00B1 /afii10055 /afii10103 /afii10098 /uni00B5 /uni00B6 /uni00B7
+     /afii10071 /afii61352 /afii10101 /uni00BB /afii10105 /afii10054 /afii10102 /afii10104
  192 /afii10017 /afii10018 /afii10019 /afii10020 /afii10021 /afii10022 /afii10024 /afii10025
      /afii10026 /afii10027 /afii10028 /afii10029 /afii10030 /afii10031 /afii10032 /afii10033
  208 /afii10034 /afii10035 /afii10036 /afii10037 /afii10038 /afii10039 /afii10040 /afii10041

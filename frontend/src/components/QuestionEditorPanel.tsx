@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
+import { apiClient } from '../api/client'
 import type { Question, QuestionOption } from '../types'
 
 interface QuestionEditorPanelProps {
@@ -152,7 +153,34 @@ export function QuestionEditorPanel(props: QuestionEditorPanelProps) {
     handleSave({ options: next })
   }
 
+  const handleImageUpload = async (index: number, file: File) => {
+    const formData = new FormData()
+    formData.append('image', file)
+    try {
+      const res = await apiClient.post('/upload/image', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      const imageUrl = res.data.image_url as string
+      const next = options.map((opt, i) =>
+        i === index ? { ...opt, image_url: imageUrl } : opt,
+      )
+      setOptions(next)
+      handleSave({ options: next })
+    } catch {
+      // ignore upload errors silently
+    }
+  }
+
+  const removeImage = (index: number) => {
+    const next = options.map((opt, i) =>
+      i === index ? { ...opt, image_url: undefined } : opt,
+    )
+    setOptions(next)
+    handleSave({ options: next })
+  }
+
   const hasOptions = HAS_OPTIONS.includes(question.type)
+  const isImageChoice = question.type === 'image_choice'
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-5">
@@ -238,45 +266,85 @@ export function QuestionEditorPanel(props: QuestionEditorPanelProps) {
           <h3 className="text-sm font-medium text-gray-700 mb-2">
             Варианты ответов
           </h3>
-          <div className="space-y-2">
+          <div className="space-y-3">
             {options.map((opt, index) => (
-              <div key={index} className="flex items-center gap-2">
-                <div
-                  className={`w-2 h-8 rounded-full flex-shrink-0 ${OPTION_COLORS[index] ?? 'bg-gray-400'}`}
-                />
-                <input
-                  type="text"
-                  value={opt.text}
-                  onChange={(e) => updateOption(index, 'text', e.target.value)}
-                  onBlur={handleOptionBlur}
-                  placeholder={`Вариант ${index + 1}`}
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                />
-                <button
-                  type="button"
-                  onClick={() => handleCorrectToggle(index)}
-                  title={opt.is_correct ? 'Правильный ответ' : 'Отметить как правильный'}
-                  className={`flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center transition-colors border ${
-                    opt.is_correct
-                      ? 'bg-emerald-100 border-emerald-300 text-emerald-700'
-                      : 'bg-gray-50 border-gray-200 text-gray-400 hover:bg-gray-100'
-                  }`}
-                >
-                  {question.type === 'single_choice' ? (
-                    <span className="text-xs">{opt.is_correct ? '\u25C9' : '\u25CB'}</span>
-                  ) : (
-                    <span className="text-xs">{opt.is_correct ? '\u2713' : ''}</span>
-                  )}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => removeOption(index)}
-                  disabled={options.length <= 2}
-                  className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors disabled:opacity-30 disabled:pointer-events-none"
-                  title="Удалить вариант"
-                >
-                  &times;
-                </button>
+              <div key={index} className="flex flex-col gap-2">
+                <div className="flex items-center gap-2">
+                  <div
+                    className={`w-2 h-8 rounded-full flex-shrink-0 ${OPTION_COLORS[index] ?? 'bg-gray-400'}`}
+                  />
+                  <input
+                    type="text"
+                    value={opt.text}
+                    onChange={(e) => updateOption(index, 'text', e.target.value)}
+                    onBlur={handleOptionBlur}
+                    placeholder={isImageChoice ? `Подпись ${index + 1} (необяз.)` : `Вариант ${index + 1}`}
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleCorrectToggle(index)}
+                    title={opt.is_correct ? 'Правильный ответ' : 'Отметить как правильный'}
+                    className={`flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center transition-colors border ${
+                      opt.is_correct
+                        ? 'bg-emerald-100 border-emerald-300 text-emerald-700'
+                        : 'bg-gray-50 border-gray-200 text-gray-400 hover:bg-gray-100'
+                    }`}
+                  >
+                    {question.type === 'single_choice' || question.type === 'image_choice' ? (
+                      <span className="text-xs">{opt.is_correct ? '\u25C9' : '\u25CB'}</span>
+                    ) : (
+                      <span className="text-xs">{opt.is_correct ? '\u2713' : ''}</span>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => removeOption(index)}
+                    disabled={options.length <= 2}
+                    className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors disabled:opacity-30 disabled:pointer-events-none"
+                    title="Удалить вариант"
+                  >
+                    &times;
+                  </button>
+                </div>
+                {/* Image upload for image_choice */}
+                {isImageChoice && (
+                  <div className="ml-4 flex items-center gap-2">
+                    {opt.image_url ? (
+                      <div className="relative group">
+                        <img
+                          src={opt.image_url}
+                          alt={opt.text || `Вариант ${index + 1}`}
+                          className="h-16 w-24 object-cover rounded-lg border border-gray-200"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeImage(index)}
+                          className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-500 text-white text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                          title="Удалить изображение"
+                        >
+                          &times;
+                        </button>
+                      </div>
+                    ) : (
+                      <label className="flex items-center gap-2 px-3 py-2 border border-dashed border-gray-300 rounded-lg text-sm text-gray-500 hover:border-indigo-400 hover:text-indigo-600 cursor-pointer transition-colors">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                        Загрузить изображение
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0]
+                            if (file) handleImageUpload(index, file)
+                          }}
+                        />
+                      </label>
+                    )}
+                  </div>
+                )}
               </div>
             ))}
           </div>
