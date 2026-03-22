@@ -77,6 +77,7 @@ export function HostSessionPage() {
     (location.state as { pollId?: string } | null)?.pollId ?? null,
   )
 
+  const [roomReady, setRoomReady] = useState(false) // true once getRoomInfo completes (Hub room exists)
   const [copied, setCopied] = useState(false)
   const [starting, setStarting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -107,8 +108,9 @@ export function HostSessionPage() {
 
   const joinUrl = `${window.location.origin}/join/${code}`
 
-  // On mount: fetch room info to get pollId (if missing) and sync roomStatus
-  // This handles page refresh / tab reconnect scenarios.
+  // On mount: fetch room info to get pollId (if missing) and sync roomStatus.
+  // This also ensures the Hub room exists (backend re-creates it if lost after restart).
+  // Must complete BEFORE the WS connection is established.
   useEffect(() => {
     if (!code) return
     getRoomInfo(code)
@@ -127,6 +129,7 @@ export function HostSessionPage() {
         }
       })
       .catch(() => {})
+      .finally(() => setRoomReady(true))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [code])
 
@@ -191,11 +194,10 @@ export function HostSessionPage() {
     }
   }, [code])
 
-  // WebSocket setup — runs once when code/token are known.
-  // We wait until accessToken is available so the organizer connects with a JWT;
-  // connecting without it would fall back to "participant" role → 400.
+  // WebSocket setup — waits for roomReady (getRoomInfo complete) and accessToken.
+  // getRoomInfo must finish first so the backend Hub room is guaranteed to exist.
   useEffect(() => {
-    if (!code || !accessToken) return
+    if (!code || !accessToken || !roomReady) return
 
     setRoom(code)
     getRoomParticipants(code).then(setParticipants).catch(() => {})
@@ -312,7 +314,7 @@ export function HostSessionPage() {
       socket.disconnect()
       reset()
     }
-  }, [code, accessToken, setRoom, setParticipants, addParticipant, removeParticipant, setStatus, reset])
+  }, [code, accessToken, roomReady, setRoom, setParticipants, addParticipant, removeParticipant, setStatus, reset])
 
   if (!code) {
     return (

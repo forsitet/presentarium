@@ -128,6 +128,10 @@ func (s *roomService) GetRoom(ctx context.Context, code string) (*RoomInfoRespon
 		return nil, err
 	}
 
+	// If the session is not finished but the Hub lost the room (e.g. server restart),
+	// re-create it so that WebSocket connections can be established.
+	s.ensureHubRoom(session)
+
 	participants := 0
 	if room := s.hub.GetRoom(code); room != nil {
 		participants = room.ParticipantCount()
@@ -142,6 +146,19 @@ func (s *roomService) GetRoom(ctx context.Context, code string) (*RoomInfoRespon
 	}, nil
 }
 
+// ensureHubRoom re-creates the in-memory Hub room from a DB session if it was
+// lost (e.g. after a server/container restart) and the session is still active.
+func (s *roomService) ensureHubRoom(session *model.Session) {
+	if session.Status == "finished" {
+		return
+	}
+	if s.hub.GetRoom(session.RoomCode) != nil {
+		return // already exists
+	}
+	slog.Info("re-creating hub room from DB session", "code", session.RoomCode, "session_id", session.ID)
+	s.hub.CreateRoom(session.RoomCode, session.ID)
+}
+
 func (s *roomService) ChangeState(ctx context.Context, userID uuid.UUID, code, action string) error {
 	session, err := s.sessionRepo.GetByCode(ctx, code)
 	if err != nil {
@@ -151,6 +168,9 @@ func (s *roomService) ChangeState(ctx context.Context, userID uuid.UUID, code, a
 	if session.Status == "finished" {
 		return errs.ErrConflict
 	}
+
+	// Re-create Hub room if it was lost (server restart)
+	s.ensureHubRoom(session)
 
 	// Verify poll ownership — only the organizer can change state
 	poll, err := s.pollRepo.GetByID(ctx, session.PollID)
