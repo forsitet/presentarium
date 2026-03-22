@@ -94,6 +94,9 @@ export function ParticipantSessionPage() {
   const [answerSubmitted, setAnswerSubmitted] = useState(false)
   const [answerResult, setAnswerResult] = useState<AnswerResult | null>(null)
 
+  // Word cloud multi-submit state
+  const [submittedWords, setSubmittedWords] = useState<string[]>([])
+
   // Post-question results
   const [revealedOptions, setRevealedOptions] = useState<QuestionOption[]>([])
   const [myRank, setMyRank] = useState<number>(0)
@@ -161,6 +164,7 @@ export function ParticipantSessionPage() {
       setAnswerResult(null)
       setRevealedOptions([])
       setScorePopup(null)
+      setSubmittedWords([])
       setStatus('showing_question')
       setScreenKey((k) => k + 1)
     }
@@ -275,6 +279,14 @@ export function ParticipantSessionPage() {
     socket.send('submit_text', { question_id: question.question_id, text: textAnswer.trim() })
   }
 
+  function submitWordCloudWord() {
+    if (!question || textAnswer.trim() === '') return
+    const word = textAnswer.trim()
+    socket.send('submit_text', { question_id: question.question_id, text: word })
+    setSubmittedWords((prev) => [...prev, word])
+    setTextAnswer('')
+  }
+
   // ---- Render ----
 
   if (status === 'finished') {
@@ -333,11 +345,13 @@ export function ParticipantSessionPage() {
 
         {/* Question text */}
         <div className="bg-white/10 backdrop-blur rounded-2xl p-4 sm:p-5 mb-4 sm:mb-6 text-center">
-          <p className="text-white text-lg sm:text-xl font-semibold leading-snug">{question.text || 'Вопрос...'}</p>
+          <p className="text-white text-lg sm:text-xl font-semibold leading-snug">
+            {question.text || (question.type === 'word_cloud' ? 'Предложите ваши слова' : 'Вопрос...')}
+          </p>
         </div>
 
-        {/* Answer submitted overlay */}
-        {answerSubmitted && (
+        {/* Answer submitted overlay (not shown for word_cloud — it allows multiple submissions) */}
+        {answerSubmitted && question.type !== 'word_cloud' && (
           <div className="flex-1 flex items-center justify-center">
             <div className="bg-white/20 backdrop-blur rounded-2xl p-8 text-center text-white animate-score-pop">
               <div className="text-5xl mb-3">✓</div>
@@ -348,7 +362,7 @@ export function ParticipantSessionPage() {
         )}
 
         {/* Inputs */}
-        {!answerSubmitted && (
+        {(!answerSubmitted || question.type === 'word_cloud') && (
           <div className="flex-1 flex flex-col">
             {(question.type === 'single_choice' || question.type === 'image_choice') && (
               <SingleChoiceInput
@@ -365,15 +379,21 @@ export function ParticipantSessionPage() {
                 onSubmit={submitMultiple}
               />
             )}
-            {(question.type === 'open_text' || question.type === 'word_cloud') && (
+            {question.type === 'open_text' && (
               <TextInput
                 value={textAnswer}
                 onChange={setTextAnswer}
                 onSubmit={submitText}
-                maxLength={question.type === 'word_cloud' ? 50 : 500}
-                placeholder={
-                  question.type === 'word_cloud' ? 'Введите слово...' : 'Введите ответ...'
-                }
+                maxLength={500}
+                placeholder="Введите ответ..."
+              />
+            )}
+            {question.type === 'word_cloud' && (
+              <WordCloudInput
+                value={textAnswer}
+                onChange={setTextAnswer}
+                onSubmit={submitWordCloudWord}
+                submittedWords={submittedWords}
               />
             )}
             {question.type === 'brainstorm' && (
@@ -538,6 +558,79 @@ function TextInput({
       >
         Отправить
       </button>
+    </div>
+  )
+}
+
+function WordCloudInput({
+  value,
+  onChange,
+  onSubmit,
+  submittedWords,
+}: {
+  value: string
+  onChange: (v: string) => void
+  onSubmit: () => void
+  submittedWords: string[]
+}) {
+  const maxWords = 10
+  const canSubmit = value.trim().length > 0 && submittedWords.length < maxWords
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && canSubmit) {
+      e.preventDefault()
+      onSubmit()
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      {/* Submitted words chips */}
+      {submittedWords.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {submittedWords.map((word, i) => (
+            <span
+              key={i}
+              className="px-3 py-1.5 rounded-full bg-white/20 text-white text-sm font-medium animate-score-pop"
+            >
+              {word}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {submittedWords.length >= maxWords ? (
+        <div className="bg-white/20 backdrop-blur rounded-2xl p-6 text-center text-white">
+          <div className="text-3xl mb-2">✓</div>
+          <p className="text-lg font-bold">Все слова отправлены!</p>
+          <p className="text-white/70 text-sm mt-1">Вы отправили {maxWords} слов</p>
+        </div>
+      ) : (
+        <>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={value}
+              onChange={(e) => onChange(e.target.value)}
+              onKeyDown={handleKeyDown}
+              maxLength={50}
+              placeholder="Введите слово..."
+              className="flex-1 rounded-xl bg-white/10 text-white placeholder-white/40 border border-white/20 px-4 py-3 text-lg focus:outline-none focus:border-white/60"
+              autoFocus
+            />
+            <button
+              onClick={onSubmit}
+              disabled={!canSubmit}
+              className="px-6 py-3 rounded-xl bg-white text-indigo-700 font-bold text-lg disabled:opacity-40 active:scale-95 transition-all whitespace-nowrap"
+            >
+              +
+            </button>
+          </div>
+          <p className="text-white/40 text-xs text-center">
+            {submittedWords.length} / {maxWords} слов отправлено
+          </p>
+        </>
+      )}
     </div>
   )
 }

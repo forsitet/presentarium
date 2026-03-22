@@ -1,4 +1,4 @@
-import { Component, type ReactNode } from 'react'
+import { Component, type ReactNode, useRef, useState, useLayoutEffect } from 'react'
 import ReactWordcloud from 'react-wordcloud'
 
 interface WordEntry {
@@ -11,6 +11,8 @@ interface WordCloudViewProps {
   hiddenWords?: Set<string>
   onHideWord?: (word: string) => void
   showModerationPanel?: boolean
+  /** When true, the cloud fills all available vertical space. */
+  fullScreen?: boolean
 }
 
 const WC_OPTIONS = {
@@ -22,6 +24,12 @@ const WC_OPTIONS = {
   colors: ['#818cf8', '#a78bfa', '#f472b6', '#fb923c', '#34d399', '#60a5fa', '#facc15'],
   enableTooltip: true,
   tooltipOptions: {},
+}
+
+const WC_OPTIONS_FULL = {
+  ...WC_OPTIONS,
+  fontSizes: [18, 96] as [number, number],
+  padding: 6,
 }
 
 /* ---------- Error Boundary for react-wordcloud ---------- */
@@ -73,7 +81,28 @@ export function WordCloudView({
   hiddenWords = new Set(),
   onHideWord,
   showModerationPanel = false,
+  fullScreen = false,
 }: WordCloudViewProps) {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [cloudSize, setCloudSize] = useState<[number, number]>([560, 256])
+
+  // Measure the container once it mounts (and on resize) so the cloud fills it.
+  useLayoutEffect(() => {
+    if (!fullScreen || !containerRef.current) return
+    const measure = () => {
+      if (containerRef.current) {
+        const { width, height } = containerRef.current.getBoundingClientRect()
+        if (width > 0 && height > 0) {
+          setCloudSize([Math.floor(width), Math.floor(height)])
+        }
+      }
+    }
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(containerRef.current)
+    return () => ro.disconnect()
+  }, [fullScreen])
+
   const visibleWords = words
     .filter((w) => !hiddenWords.has(w.text))
     .map((w) => ({ text: w.text, value: Math.max(w.count, 1) })) // ensure positive values
@@ -81,22 +110,29 @@ export function WordCloudView({
 
   if (words.length === 0) {
     return (
-      <div className="flex items-center justify-center h-48 text-gray-500 text-sm">
+      <div className={`flex items-center justify-center text-gray-500 text-sm ${fullScreen ? 'h-full' : 'h-48'}`}>
         Ждём ответов участников...
       </div>
     )
   }
 
+  const cloudHeight = fullScreen ? 'flex-1 min-h-[300px]' : 'h-64'
+  const options = fullScreen ? WC_OPTIONS_FULL : WC_OPTIONS
+  const size: [number, number] = fullScreen ? cloudSize : [560, 256]
+
   return (
-    <div className="flex flex-col gap-4">
+    <div className={`flex flex-col gap-4 ${fullScreen ? 'h-full' : ''}`}>
       {/* Word cloud visualization */}
-      <div className="h-64 w-full bg-gray-900 rounded-xl overflow-hidden">
+      <div
+        ref={containerRef}
+        className={`${cloudHeight} w-full bg-gray-900 rounded-xl overflow-hidden`}
+      >
         {visibleWords.length > 0 ? (
           <WordCloudErrorBoundary fallback={<WordChipsFallback words={visibleWords} />}>
             <ReactWordcloud
               words={visibleWords}
-              options={WC_OPTIONS}
-              size={[560, 256]}
+              options={options}
+              size={size}
             />
           </WordCloudErrorBoundary>
         ) : (
@@ -108,7 +144,7 @@ export function WordCloudView({
 
       {/* Word list with moderation (hide/show) buttons */}
       {showModerationPanel && words.length > 0 && (
-        <div>
+        <div className="flex-shrink-0">
           <p className="text-gray-400 text-xs uppercase tracking-wide mb-2">
             Слова ({words.length})
           </p>

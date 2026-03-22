@@ -550,15 +550,17 @@ func (s *conductService) handleSubmitText(c *ws.Client, room *ws.Room, env ws.En
 
 	ctx := context.Background()
 
-	// Prevent duplicate answers.
-	_, err := s.answerRepo.GetByParticipantAndQuestion(ctx, *participantID, data.QuestionID)
-	if err == nil {
-		sendError(room, c, "already answered this question")
-		return
-	}
-	if !errors.Is(err, errs.ErrNotFound) {
-		sendError(room, c, "internal error")
-		return
+	// Prevent duplicate answers (except word_cloud which allows multiple submissions).
+	if current.Type != "word_cloud" {
+		_, err := s.answerRepo.GetByParticipantAndQuestion(ctx, *participantID, data.QuestionID)
+		if err == nil {
+			sendError(room, c, "already answered this question")
+			return
+		}
+		if !errors.Is(err, errs.ErrNotFound) {
+			sendError(room, c, "internal error")
+			return
+		}
 	}
 
 	responseTimeMs := int(time.Since(time.Unix(current.StartedAt, 0)).Milliseconds())
