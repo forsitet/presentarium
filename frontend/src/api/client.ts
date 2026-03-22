@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { useAuthStore } from '../stores/authStore'
 
 const BASE_URL = import.meta.env.VITE_API_URL || '/api'
 
@@ -25,6 +26,9 @@ apiClient.interceptors.response.use(
         const res = await axios.post(`${BASE_URL}/auth/refresh`, {}, { withCredentials: true })
         const { access_token } = res.data
         localStorage.setItem('access_token', access_token)
+        // Sync the refreshed token to the Zustand store so that components
+        // (e.g. WebSocket connections) that read from the store get the fresh token.
+        useAuthStore.getState().setToken(access_token)
         originalRequest.headers.Authorization = `Bearer ${access_token}`
         return apiClient(originalRequest)
       } catch {

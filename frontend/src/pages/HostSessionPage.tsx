@@ -201,7 +201,10 @@ export function HostSessionPage() {
 
     setRoom(code)
     getRoomParticipants(code).then(setParticipants).catch(() => {})
-    socket.connect(code, accessToken)
+    // Use the freshest available token: the interceptor may have refreshed it
+    // (updating localStorage) before the Zustand store re-renders.
+    const wsToken = localStorage.getItem('access_token') || accessToken
+    socket.connect(code, wsToken)
 
     const onParticipantJoined = (data: unknown) => addParticipant(data as Participant)
     const onParticipantLeft = (data: unknown) => {
@@ -498,160 +501,178 @@ export function HostSessionPage() {
           </button>
         </div>
 
-        {/* Main content: question + live chart */}
-        <div key={screenKey} className="flex-1 max-w-7xl mx-auto w-full px-3 sm:px-6 py-4 sm:py-8 grid grid-cols-1 lg:grid-cols-2 gap-5 sm:gap-8 animate-fade-in-up">
-          {/* Left: question text + option tiles */}
-          <div className="flex flex-col gap-4 sm:gap-5">
-            <div className="bg-gray-800 rounded-2xl border border-gray-700 p-4 sm:p-8 flex items-center justify-center flex-1 min-h-[120px] sm:min-h-[180px]">
-              <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-white text-center leading-snug animate-question-in">
-                {activeQ.text || 'Вопрос...'}
+        {/* Main content — word_cloud gets a full-screen layout; others use the split grid */}
+        {activeQ.type === 'word_cloud' ? (
+          <div key={screenKey} className="flex-1 w-full px-3 sm:px-6 py-4 sm:py-6 flex flex-col animate-fade-in-up">
+            {/* Question text */}
+            <div className="text-center mb-4">
+              <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-white leading-snug animate-question-in">
+                {activeQ.text || 'Предложите ваши слова'}
+              </p>
+              <p className="text-gray-400 text-sm mt-2">
+                {answered} ответов от {totalPart || participants.length} участников
               </p>
             </div>
 
-            {hasOptions && (
-              <div className="grid grid-cols-2 gap-3">
-                {activeQ.options!.map((opt, i) => (
-                  <div
-                    key={i}
-                    className={`${OPTION_BG[i % OPTION_BG.length]} rounded-xl p-4 flex items-center gap-3 animate-slide-stagger`}
-                    style={{ animationDelay: `${i * 60}ms` }}
-                  >
-                    <span className="text-white text-xl font-bold">{OPTION_SHAPES[i]}</span>
-                    <span className="text-white font-semibold text-sm leading-snug flex-1 line-clamp-2">
-                      {opt.text || `Вариант ${i + 1}`}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
+            {/* Full-screen word cloud */}
+            <div className="flex-1 min-h-0">
+              <WordCloudView
+                words={wordcloudWords}
+                hiddenWords={hiddenWords}
+                onHideWord={(word) =>
+                  setHiddenWords((prev) => {
+                    const next = new Set(prev)
+                    if (next.has(word)) next.delete(word)
+                    else next.add(word)
+                    return next
+                  })
+                }
+                showModerationPanel
+                fullScreen
+              />
+            </div>
           </div>
-
-          {/* Right: live bar chart + progress */}
-          <div className="flex flex-col gap-5">
-            <div className="bg-gray-800 rounded-2xl border border-gray-700 p-5 flex-1">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-white font-bold">Распределение ответов</h3>
-                <span className="text-sm text-gray-400">
-                  {answered} / {totalPart || participants.length}
-                </span>
-              </div>
-              {hasOptions ? (
-                <AnswerBarChart
-                  options={activeQ.options!}
-                  distribution={distribution}
-                  showCorrect={false}
-                />
-              ) : activeQ.type === 'word_cloud' ? (
-                <WordCloudView
-                  words={wordcloudWords}
-                  hiddenWords={hiddenWords}
-                  onHideWord={(word) =>
-                    setHiddenWords((prev) => {
-                      const next = new Set(prev)
-                      if (next.has(word)) next.delete(word)
-                      else next.add(word)
-                      return next
-                    })
-                  }
-                  showModerationPanel
-                />
-              ) : activeQ.type === 'brainstorm' ? (
-                <BrainstormBoard
-                  questionId={activeQ.question_id}
-                  answeredCount={answered}
-                  totalParticipants={totalPart || participants.length}
-                />
-              ) : (
-                <p className="text-gray-500 text-sm text-center py-12">
-                  {answered} текстовых ответов
+        ) : (
+          <div key={screenKey} className="flex-1 max-w-7xl mx-auto w-full px-3 sm:px-6 py-4 sm:py-8 grid grid-cols-1 lg:grid-cols-2 gap-5 sm:gap-8 animate-fade-in-up">
+            {/* Left: question text + option tiles */}
+            <div className="flex flex-col gap-4 sm:gap-5">
+              <div className="bg-gray-800 rounded-2xl border border-gray-700 p-4 sm:p-8 flex items-center justify-center flex-1 min-h-[120px] sm:min-h-[180px]">
+                <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-white text-center leading-snug animate-question-in">
+                  {activeQ.text || 'Вопрос...'}
                 </p>
+              </div>
+
+              {hasOptions && (
+                <div className="grid grid-cols-2 gap-3">
+                  {activeQ.options!.map((opt, i) => (
+                    <div
+                      key={i}
+                      className={`${OPTION_BG[i % OPTION_BG.length]} rounded-xl p-4 flex items-center gap-3 animate-slide-stagger`}
+                      style={{ animationDelay: `${i * 60}ms` }}
+                    >
+                      <span className="text-white text-xl font-bold">{OPTION_SHAPES[i]}</span>
+                      <span className="text-white font-semibold text-sm leading-snug flex-1 line-clamp-2">
+                        {opt.text || `Вариант ${i + 1}`}
+                      </span>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
 
-            {/* Monitoring panel — hide for brainstorm (BrainstormBoard has its own stats) */}
-            {activeQ.type !== 'brainstorm' && (
-              <div className="bg-gray-800 rounded-2xl border border-gray-700 p-5 space-y-4">
-                {/* Progress bar */}
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-gray-400 text-sm">Ответили</span>
-                    <span className="text-white font-bold">
-                      {answered} / {totalPart || participants.length}
-                      {(totalPart || participants.length) > 0 && (
-                        <span className="text-gray-400 font-normal text-sm ml-1">
-                          ({Math.round((answered / (totalPart || participants.length)) * 100)}%)
-                        </span>
-                      )}
-                    </span>
-                  </div>
-                  <div className="h-3 bg-gray-700 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-indigo-500 rounded-full transition-all duration-300"
-                      style={{
-                        width: `${
-                          (totalPart || participants.length) > 0
-                            ? (answered / (totalPart || participants.length)) * 100
-                            : 0
-                        }%`,
-                      }}
-                    />
-                  </div>
+            {/* Right: live bar chart + progress */}
+            <div className="flex flex-col gap-5">
+              <div className="bg-gray-800 rounded-2xl border border-gray-700 p-5 flex-1">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-white font-bold">Распределение ответов</h3>
+                  <span className="text-sm text-gray-400">
+                    {answered} / {totalPart || participants.length}
+                  </span>
                 </div>
-
-                {/* Avg response time */}
-                {avgResponseMs > 0 && (
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-gray-400">Среднее время ответа</span>
-                    <span className="text-white font-medium tabular-nums">
-                      {(avgResponseMs / 1000).toFixed(1)} сек
-                    </span>
-                  </div>
-                )}
-
-                {/* Per-participant status list */}
-                {(participants.length > 0 || disconnectedDuringQuestion.size > 0) && (
-                  <div>
-                    <p className="text-gray-400 text-xs uppercase tracking-wide mb-2">
-                      Участники
-                    </p>
-                    <div className="space-y-1 max-h-36 overflow-y-auto">
-                      {participants.map((p) => {
-                        const hasAnswered = answeredParticipantIds.has(p.id)
-                        return (
-                          <div key={p.id} className="flex items-center gap-2 text-sm">
-                            <span
-                              className={`text-base leading-none ${
-                                hasAnswered ? 'text-green-400' : 'text-gray-500'
-                              }`}
-                              title={hasAnswered ? 'Ответил' : 'Ожидает'}
-                            >
-                              {hasAnswered ? '✓' : '◷'}
-                            </span>
-                            <span
-                              className={`truncate flex-1 ${
-                                hasAnswered ? 'text-gray-300' : 'text-gray-500'
-                              }`}
-                            >
-                              {p.name}
-                            </span>
-                          </div>
-                        )
-                      })}
-                      {Array.from(disconnectedDuringQuestion.entries()).map(([id, name]) => (
-                        <div key={id} className="flex items-center gap-2 text-sm">
-                          <span className="text-red-500 text-base leading-none" title="Отключился">
-                            ✗
-                          </span>
-                          <span className="truncate flex-1 text-red-400 line-through">{name}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+                {hasOptions ? (
+                  <AnswerBarChart
+                    options={activeQ.options!}
+                    distribution={distribution}
+                    showCorrect={false}
+                  />
+                ) : activeQ.type === 'brainstorm' ? (
+                  <BrainstormBoard
+                    questionId={activeQ.question_id}
+                    answeredCount={answered}
+                    totalParticipants={totalPart || participants.length}
+                  />
+                ) : (
+                  <p className="text-gray-500 text-sm text-center py-12">
+                    {answered} текстовых ответов
+                  </p>
                 )}
               </div>
-            )}
+
+              {/* Monitoring panel — hide for brainstorm (BrainstormBoard has its own stats) */}
+              {activeQ.type !== 'brainstorm' && (
+                <div className="bg-gray-800 rounded-2xl border border-gray-700 p-5 space-y-4">
+                  {/* Progress bar */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-gray-400 text-sm">Ответили</span>
+                      <span className="text-white font-bold">
+                        {answered} / {totalPart || participants.length}
+                        {(totalPart || participants.length) > 0 && (
+                          <span className="text-gray-400 font-normal text-sm ml-1">
+                            ({Math.round((answered / (totalPart || participants.length)) * 100)}%)
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                    <div className="h-3 bg-gray-700 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-indigo-500 rounded-full transition-all duration-300"
+                        style={{
+                          width: `${
+                            (totalPart || participants.length) > 0
+                              ? (answered / (totalPart || participants.length)) * 100
+                              : 0
+                          }%`,
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Avg response time */}
+                  {avgResponseMs > 0 && (
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-400">Среднее время ответа</span>
+                      <span className="text-white font-medium tabular-nums">
+                        {(avgResponseMs / 1000).toFixed(1)} сек
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Per-participant status list */}
+                  {(participants.length > 0 || disconnectedDuringQuestion.size > 0) && (
+                    <div>
+                      <p className="text-gray-400 text-xs uppercase tracking-wide mb-2">
+                        Участники
+                      </p>
+                      <div className="space-y-1 max-h-36 overflow-y-auto">
+                        {participants.map((p) => {
+                          const hasAnswered = answeredParticipantIds.has(p.id)
+                          return (
+                            <div key={p.id} className="flex items-center gap-2 text-sm">
+                              <span
+                                className={`text-base leading-none ${
+                                  hasAnswered ? 'text-green-400' : 'text-gray-500'
+                                }`}
+                                title={hasAnswered ? 'Ответил' : 'Ожидает'}
+                              >
+                                {hasAnswered ? '✓' : '◷'}
+                              </span>
+                              <span
+                                className={`truncate flex-1 ${
+                                  hasAnswered ? 'text-gray-300' : 'text-gray-500'
+                                }`}
+                              >
+                                {p.name}
+                              </span>
+                            </div>
+                          )
+                        })}
+                        {Array.from(disconnectedDuringQuestion.entries()).map(([id, name]) => (
+                          <div key={id} className="flex items-center gap-2 text-sm">
+                            <span className="text-red-500 text-base leading-none" title="Отключился">
+                              ✗
+                            </span>
+                            <span className="truncate flex-1 text-red-400 line-through">{name}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
-        </div>
+        )}
       </div>
     )
   }
@@ -692,88 +713,116 @@ export function HostSessionPage() {
           </div>
         </div>
 
-        <div key={screenKey} className="flex-1 max-w-7xl mx-auto w-full px-3 sm:px-6 py-4 sm:py-8 grid grid-cols-1 lg:grid-cols-2 gap-5 sm:gap-8 animate-fade-in-up">
-          {/* Left: question text + chart */}
-          <div className="flex flex-col gap-5">
-            <div className="bg-gray-800 rounded-2xl border border-gray-700 p-6">
-              <p className="text-xl font-bold text-white mb-5 leading-snug">{activeQ.text}</p>
-
-              {hasOptions ? (
-                <>
-                  <AnswerBarChart
-                    options={displayOptions}
-                    distribution={distribution}
-                    showCorrect={!!revealedOptions}
-                  />
-                  {/* Option list with correct/incorrect markers */}
-                  <div className="mt-4 grid grid-cols-2 gap-2">
-                    {displayOptions.map((opt, i) => (
-                      <div
-                        key={i}
-                        className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm animate-slide-stagger ${
-                          revealedOptions
-                            ? opt.is_correct
-                              ? 'bg-green-900/40 border border-green-700 text-green-300'
-                              : 'bg-gray-700/40 text-gray-400'
-                            : 'bg-gray-700/50 text-gray-300'
-                        }`}
-                        style={{ animationDelay: `${i * 80}ms` }}
-                      >
-                        {revealedOptions && (
-                          <span className="font-bold">{opt.is_correct ? '✓' : '✗'}</span>
-                        )}
-                        <span className="truncate flex-1">{opt.text}</span>
-                        <span className="ml-auto font-bold text-white tabular-nums">
-                          {distribution[String(i)] ?? 0}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </>
-              ) : activeQ.type === 'word_cloud' ? (
-                <WordCloudView
-                  words={wordcloudWords}
-                  hiddenWords={hiddenWords}
-                  onHideWord={(word) =>
-                    setHiddenWords((prev) => {
-                      const next = new Set(prev)
-                      if (next.has(word)) next.delete(word)
-                      else next.add(word)
-                      return next
-                    })
-                  }
-                  showModerationPanel
-                />
-              ) : (
-                <p className="text-gray-500 text-sm text-center py-8">
-                  {activeQ.type === 'brainstorm'
-                    ? 'Результаты брейншторма показаны на доске идей'
-                    : `Текстовых ответов: ${Object.values(distribution).reduce((a, b) => a + b, 0)}`}
-                </p>
-              )}
+        {/* Word cloud results get a full-screen layout; others use the split grid */}
+        {activeQ.type === 'word_cloud' ? (
+          <div key={screenKey} className="flex-1 w-full px-3 sm:px-6 py-4 sm:py-6 flex flex-col animate-fade-in-up">
+            {/* Question text */}
+            <div className="text-center mb-4">
+              <p className="text-xl sm:text-2xl font-bold text-white leading-snug">
+                {activeQ.text || 'Облако слов'}
+              </p>
             </div>
-          </div>
 
-          {/* Right: leaderboard + next question preview */}
-          <div className="flex flex-col gap-5">
-            <Leaderboard entries={lbEntries} title="Топ-5 после вопроса" />
+            {/* Full-screen word cloud */}
+            <div className="flex-1 min-h-0">
+              <WordCloudView
+                words={wordcloudWords}
+                hiddenWords={hiddenWords}
+                onHideWord={(word) =>
+                  setHiddenWords((prev) => {
+                    const next = new Set(prev)
+                    if (next.has(word)) next.delete(word)
+                    else next.add(word)
+                    return next
+                  })
+                }
+                showModerationPanel
+                fullScreen
+              />
+            </div>
 
+            {/* Bottom bar: next question */}
             {nextQuestion && (
-              <div className="bg-gray-800 rounded-2xl border border-gray-700 p-5">
-                <p className="text-gray-400 text-xs uppercase tracking-wide mb-2">
-                  Следующий · {nextQuestion.position} из {questions.length}
-                </p>
-                <p className="text-white font-medium leading-snug">{nextQuestion.text}</p>
+              <div className="flex-shrink-0 mt-4 flex items-center justify-center gap-4">
                 <button
                   onClick={() => handleShowQuestion(nextQuestion.id)}
-                  className="mt-4 w-full bg-indigo-600 hover:bg-indigo-500 text-white py-3 rounded-xl text-sm font-bold transition-all active:scale-[0.98]"
+                  className="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-3 rounded-xl text-sm font-bold transition-all active:scale-[0.98]"
                 >
-                  Показать следующий вопрос
+                  Следующий вопрос →
                 </button>
               </div>
             )}
           </div>
-        </div>
+        ) : (
+          <div key={screenKey} className="flex-1 max-w-7xl mx-auto w-full px-3 sm:px-6 py-4 sm:py-8 grid grid-cols-1 lg:grid-cols-2 gap-5 sm:gap-8 animate-fade-in-up">
+            {/* Left: question text + chart */}
+            <div className="flex flex-col gap-5">
+              <div className="bg-gray-800 rounded-2xl border border-gray-700 p-6">
+                <p className="text-xl font-bold text-white mb-5 leading-snug">{activeQ.text}</p>
+
+                {hasOptions ? (
+                  <>
+                    <AnswerBarChart
+                      options={displayOptions}
+                      distribution={distribution}
+                      showCorrect={!!revealedOptions}
+                    />
+                    {/* Option list with correct/incorrect markers */}
+                    <div className="mt-4 grid grid-cols-2 gap-2">
+                      {displayOptions.map((opt, i) => (
+                        <div
+                          key={i}
+                          className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm animate-slide-stagger ${
+                            revealedOptions
+                              ? opt.is_correct
+                                ? 'bg-green-900/40 border border-green-700 text-green-300'
+                                : 'bg-gray-700/40 text-gray-400'
+                              : 'bg-gray-700/50 text-gray-300'
+                          }`}
+                          style={{ animationDelay: `${i * 80}ms` }}
+                        >
+                          {revealedOptions && (
+                            <span className="font-bold">{opt.is_correct ? '✓' : '✗'}</span>
+                          )}
+                          <span className="truncate flex-1">{opt.text}</span>
+                          <span className="ml-auto font-bold text-white tabular-nums">
+                            {distribution[String(i)] ?? 0}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-gray-500 text-sm text-center py-8">
+                    {activeQ.type === 'brainstorm'
+                      ? 'Результаты брейншторма показаны на доске идей'
+                      : `Текстовых ответов: ${Object.values(distribution).reduce((a, b) => a + b, 0)}`}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Right: leaderboard + next question preview */}
+            <div className="flex flex-col gap-5">
+              <Leaderboard entries={lbEntries} title="Топ-5 после вопроса" />
+
+              {nextQuestion && (
+                <div className="bg-gray-800 rounded-2xl border border-gray-700 p-5">
+                  <p className="text-gray-400 text-xs uppercase tracking-wide mb-2">
+                    Следующий · {nextQuestion.position} из {questions.length}
+                  </p>
+                  <p className="text-white font-medium leading-snug">{nextQuestion.text}</p>
+                  <button
+                    onClick={() => handleShowQuestion(nextQuestion.id)}
+                    className="mt-4 w-full bg-indigo-600 hover:bg-indigo-500 text-white py-3 rounded-xl text-sm font-bold transition-all active:scale-[0.98]"
+                  >
+                    Показать следующий вопрос
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     )
   }
