@@ -76,8 +76,16 @@ export async function reorderQuestions(
   await apiClient.patch(`/polls/${pollId}/questions/reorder`, order)
 }
 
-export async function getRoomInfo(code: string): Promise<Session> {
-  const res = await apiClient.get<Session>(`/rooms/${code}`)
+export interface RoomInfo {
+  room_code: string
+  poll_id: string
+  session_id: string
+  status: string
+  participants: number
+}
+
+export async function getRoomInfo(code: string): Promise<RoomInfo> {
+  const res = await apiClient.get<RoomInfo>(`/rooms/${code}`)
   return res.data
 }
 

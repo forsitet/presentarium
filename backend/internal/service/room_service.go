@@ -34,9 +34,11 @@ type CreateRoomResponse struct {
 
 // RoomInfoResponse is returned when querying room info.
 type RoomInfoResponse struct {
-	RoomCode     string `json:"room_code"`
-	Status       string `json:"status"`
-	Participants int    `json:"participants"`
+	RoomCode     string    `json:"room_code"`
+	PollID       uuid.UUID `json:"poll_id"`
+	SessionID    uuid.UUID `json:"session_id"`
+	Status       string    `json:"status"`
+	Participants int       `json:"participants"`
 }
 
 type roomService struct {
@@ -133,6 +135,8 @@ func (s *roomService) GetRoom(ctx context.Context, code string) (*RoomInfoRespon
 
 	return &RoomInfoResponse{
 		RoomCode:     session.RoomCode,
+		PollID:       session.PollID,
+		SessionID:    session.ID,
 		Status:       session.Status,
 		Participants: participants,
 	}, nil
