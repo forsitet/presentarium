@@ -1,6 +1,6 @@
 import axios from 'axios'
 import { apiClient } from './client'
-import type { Poll, Question, Participant, Session, SessionSummary, SessionDetail, ParticipantHistorySummary } from '../types'
+import type { Poll, Question, Participant, SessionSummary, SessionDetail, ParticipantHistorySummary } from '../types'
 
 const BASE_URL = import.meta.env.VITE_API_URL || '/api'
 
