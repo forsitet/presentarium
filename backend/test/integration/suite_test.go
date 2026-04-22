@@ -36,7 +36,9 @@ import (
 	"presentarium/internal/handler"
 	"presentarium/internal/repository"
 	"presentarium/internal/service"
+	"presentarium/internal/storage"
 	"presentarium/internal/ws"
+	"presentarium/pkg/pptx/pptxtest"
 )
 
 // ─── Package-level DB shared across all tests ─────────────────────────────────
@@ -116,6 +118,7 @@ func buildTestServer(t *testing.T) *testServer {
 	participantRepo := repository.NewPostgresParticipantRepo(db)
 	answerRepo := repository.NewPostgresAnswerRepo(db)
 	brainstormRepo := repository.NewPostgresBrainstormRepo(db)
+	presentationRepo := repository.NewPostgresPresentationRepo(db)
 
 	authSvc := service.NewAuthService(userRepo, testJWTSecret, 60, 7, nil)
 	pollSvc := service.NewPollService(pollRepo)
@@ -126,9 +129,11 @@ func buildTestServer(t *testing.T) *testServer {
 
 	roomSvc := service.NewRoomService(sessionRepo, pollRepo, questionRepo, hub)
 	participantSvc := service.NewParticipantService(participantRepo, sessionRepo, hub)
-	conductSvc := service.NewConductService(questionRepo, sessionRepo, pollRepo, answerRepo, brainstormRepo, hub)
 	historySvc := service.NewHistoryService(sessionRepo, answerRepo, participantRepo, questionRepo)
 	moderationSvc := service.NewModerationService(sessionRepo, answerRepo, brainstormRepo, hub)
+	memStore := storage.NewMemStorage("http://test.local/public")
+	presentationSvc := service.NewPresentationService(presentationRepo, memStore, &pptxtest.FakeConverter{})
+	conductSvc := service.NewConductService(questionRepo, sessionRepo, pollRepo, answerRepo, brainstormRepo, presentationSvc, hub)
 
 	router := handler.NewRouter(handler.RouterDeps{
 		AuthService:         authSvc,
@@ -139,7 +144,9 @@ func buildTestServer(t *testing.T) *testServer {
 		ConductService:      conductSvc,
 		HistoryService:      historySvc,
 		ModerationService:   moderationSvc,
+		PresentationService: presentationSvc,
 		WSHandler:           wsHandler,
+		Storage:             memStore,
 		JWTSecret:           testJWTSecret,
 		RefreshTokenTTLDays: 7,
 		UploadsDir:          t.TempDir(),
@@ -164,6 +171,8 @@ func truncateAll(t *testing.T) {
 			answers,
 			participants,
 			sessions,
+			presentation_slides,
+			presentations,
 			questions,
 			polls,
 			refresh_tokens,

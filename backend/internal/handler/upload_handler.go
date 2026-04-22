@@ -5,17 +5,14 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/google/uuid"
+
+	"presentarium/internal/storage"
 )
 
-const (
-	maxUploadSize = 5 << 20 // 5 MB
-	uploadsPrefix = "/uploads/"
-)
+const maxUploadSize = 5 << 20 // 5 MB
 
 // allowedMIMETypes maps detected MIME type to file extension.
 var allowedMIMETypes = map[string]string{
@@ -25,14 +22,16 @@ var allowedMIMETypes = map[string]string{
 }
 
 type uploadHandler struct {
-	uploadsDir string
+	store storage.Storage
 }
 
-func newUploadHandler(uploadsDir string) *uploadHandler {
-	return &uploadHandler{uploadsDir: uploadsDir}
+func newUploadHandler(store storage.Storage) *uploadHandler {
+	return &uploadHandler{store: store}
 }
 
-// handleImage handles POST /api/upload/image.
+// handleImage handles POST /api/upload/image. Uploads are written to the
+// public object-storage bucket under the "images/" key prefix and the
+// returned image_url is the direct (CDN-fronted in prod) URL.
 func (h *uploadHandler) handleImage(w http.ResponseWriter, r *http.Request) {
 	// Limit request body to prevent OOM; extra 1 KB for form overhead.
 	r.Body = http.MaxBytesReader(w, r.Body, maxUploadSize+1024)
@@ -72,23 +71,14 @@ func (h *uploadHandler) handleImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Ensure target directory exists.
-	imagesDir := filepath.Join(h.uploadsDir, "images")
-	if err := os.MkdirAll(imagesDir, 0o755); err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to create uploads directory")
-		return
-	}
-
-	filename := fmt.Sprintf("%s.%s", uuid.New().String(), ext)
-	dst := filepath.Join(imagesDir, filename)
-
-	if err := os.WriteFile(dst, data, 0o644); err != nil {
+	key := fmt.Sprintf("images/%s.%s", uuid.New().String(), ext)
+	url, err := h.store.Put(r.Context(), key, bytes.NewReader(data), mimeType)
+	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to save file")
 		return
 	}
 
-	imageURL := uploadsPrefix + "images/" + filename
-	writeJSON(w, http.StatusOK, map[string]string{"image_url": imageURL})
+	writeJSON(w, http.StatusOK, map[string]string{"image_url": url})
 }
 
 // detectMIME inspects the first bytes of data and returns the MIME type.

@@ -334,3 +334,128 @@ func TestRoom_ConcurrentWordCloud(t *testing.T) {
 		t.Errorf("concurrent word cloud: want count=%d, got words=%v", goroutines, words)
 	}
 }
+
+// --- Active presentation ---
+
+func makeActivePresentation(slideCount int) *ActivePresentation {
+	slides := make([]SlideInfo, slideCount)
+	for i := 0; i < slideCount; i++ {
+		slides[i] = SlideInfo{
+			ID:       uuid.New(),
+			Position: i + 1,
+			ImageURL: "https://cdn.example/slide.webp",
+			Width:    1920,
+			Height:   1080,
+		}
+	}
+	return &ActivePresentation{
+		ID:              uuid.New(),
+		Title:           "Deck",
+		SlideCount:      slideCount,
+		CurrentPosition: 1,
+		Slides:          slides,
+	}
+}
+
+func TestRoom_ActivePresentation_InitiallyNil(t *testing.T) {
+	r := newTestRoom()
+	if r.ActivePresentation() != nil {
+		t.Error("expected nil active presentation on a fresh room")
+	}
+}
+
+func TestRoom_SetActivePresentation_Roundtrip(t *testing.T) {
+	r := newTestRoom()
+	active := makeActivePresentation(3)
+	r.SetActivePresentation(active)
+
+	got := r.ActivePresentation()
+	if got == nil {
+		t.Fatal("ActivePresentation returned nil after SetActivePresentation")
+	}
+	if got.ID != active.ID {
+		t.Errorf("ID mismatch: got %s want %s", got.ID, active.ID)
+	}
+	if got.SlideCount != 3 {
+		t.Errorf("SlideCount=%d want 3", got.SlideCount)
+	}
+	if len(got.Slides) != 3 {
+		t.Errorf("len(Slides)=%d want 3", len(got.Slides))
+	}
+}
+
+func TestRoom_SetActivePresentation_DefensiveCopy(t *testing.T) {
+	r := newTestRoom()
+	active := makeActivePresentation(2)
+	r.SetActivePresentation(active)
+
+	// Mutating the caller's slice must not affect stored state.
+	active.Slides[0].Position = 999
+	got := r.ActivePresentation()
+	if got.Slides[0].Position != 1 {
+		t.Errorf("room state leaked through input slice: got Position=%d", got.Slides[0].Position)
+	}
+
+	// Mutating the returned snapshot must not affect stored state either.
+	got.Slides[1].Position = 777
+	got2 := r.ActivePresentation()
+	if got2.Slides[1].Position != 2 {
+		t.Errorf("room state leaked through output slice: got Position=%d", got2.Slides[1].Position)
+	}
+}
+
+func TestRoom_ClearActivePresentation(t *testing.T) {
+	r := newTestRoom()
+	r.SetActivePresentation(makeActivePresentation(1))
+	r.ClearActivePresentation()
+	if r.ActivePresentation() != nil {
+		t.Error("expected nil after ClearActivePresentation")
+	}
+}
+
+func TestRoom_SetActivePresentation_NilClears(t *testing.T) {
+	r := newTestRoom()
+	r.SetActivePresentation(makeActivePresentation(1))
+	r.SetActivePresentation(nil)
+	if r.ActivePresentation() != nil {
+		t.Error("SetActivePresentation(nil) should clear")
+	}
+}
+
+func TestRoom_SetSlidePosition_ValidBounds(t *testing.T) {
+	r := newTestRoom()
+	r.SetActivePresentation(makeActivePresentation(5))
+
+	cases := []int{1, 3, 5}
+	for _, pos := range cases {
+		if !r.SetSlidePosition(pos) {
+			t.Errorf("SetSlidePosition(%d): want true", pos)
+			continue
+		}
+		if got := r.ActivePresentation().CurrentPosition; got != pos {
+			t.Errorf("CurrentPosition=%d want %d", got, pos)
+		}
+	}
+}
+
+func TestRoom_SetSlidePosition_OutOfRange(t *testing.T) {
+	r := newTestRoom()
+	r.SetActivePresentation(makeActivePresentation(3))
+
+	for _, bad := range []int{0, -1, 4, 100} {
+		if r.SetSlidePosition(bad) {
+			t.Errorf("SetSlidePosition(%d): want false (out of range)", bad)
+		}
+	}
+	// Position must stay at the initial 1.
+	if got := r.ActivePresentation().CurrentPosition; got != 1 {
+		t.Errorf("CurrentPosition changed despite invalid inputs: got %d", got)
+	}
+}
+
+func TestRoom_SetSlidePosition_NoActivePresentation(t *testing.T) {
+	r := newTestRoom()
+	if r.SetSlidePosition(1) {
+		t.Error("SetSlidePosition should return false when no presentation is active")
+	}
+}

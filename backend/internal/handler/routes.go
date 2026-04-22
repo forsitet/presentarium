@@ -11,6 +11,7 @@ import (
 
 	appmw "presentarium/internal/middleware"
 	"presentarium/internal/service"
+	"presentarium/internal/storage"
 	"presentarium/internal/ws"
 )
 
@@ -24,12 +25,17 @@ type RouterDeps struct {
 	ConductService      service.ConductService
 	HistoryService      service.HistoryService
 	ModerationService   service.ModerationService
+	PresentationService service.PresentationService
 	WSHandler           *ws.Handler
+	Storage             storage.Storage
 	JWTSecret           string
 	RefreshTokenTTLDays int
-	UploadsDir          string
-	CORSAllowedOrigin   string
-	AppBaseURL          string
+	// UploadsDir is kept for backward-compat: old image URLs in the DB
+	// reference /uploads/images/... and are served from local disk. New
+	// uploads go to Storage.
+	UploadsDir        string
+	CORSAllowedOrigin string
+	AppBaseURL        string
 }
 
 // NewRouter creates and configures the HTTP router.
@@ -51,9 +57,14 @@ func NewRouter(deps RouterDeps) http.Handler {
 		r.Get("/api/sessions/by-token", sessionHPublic.handleGetByParticipantToken)
 	}
 
-	// Serve uploaded files (images) from the uploads directory.
-	uploadsAbsDir := filepath.Clean(deps.UploadsDir)
-	r.Handle("/uploads/*", http.StripPrefix("/uploads/", http.FileServer(http.Dir(uploadsAbsDir))))
+	// Serve legacy /uploads/* files written to local disk before the Storage
+	// migration. New uploads go to object storage and are served from the
+	// S3_PUBLIC_BASE_URL directly. Remove this block once all legacy image
+	// URLs have been migrated.
+	if deps.UploadsDir != "" {
+		uploadsAbsDir := filepath.Clean(deps.UploadsDir)
+		r.Handle("/uploads/*", http.StripPrefix("/uploads/", http.FileServer(http.Dir(uploadsAbsDir))))
+	}
 
 	// Wire WS join/leave hooks so the participant service manages DB records.
 	if deps.WSHandler != nil && deps.ParticipantService != nil {
@@ -81,9 +92,13 @@ func NewRouter(deps RouterDeps) http.Handler {
 	questionH := newQuestionHandler(deps.QuestionService)
 	roomH := newRoomHandler(deps.RoomService, deps.ConductService)
 	participantH := newParticipantHandler(deps.ParticipantService)
-	uploadH := newUploadHandler(deps.UploadsDir)
+	uploadH := newUploadHandler(deps.Storage)
 	sessionH := newSessionHandler(deps.HistoryService)
 	moderationH := newModerationHandler(deps.ModerationService)
+	var presentationH *presentationHandler
+	if deps.PresentationService != nil {
+		presentationH = newPresentationHandler(deps.PresentationService)
+	}
 
 	r.Route("/api", func(r chi.Router) {
 		r.Route("/auth", func(r chi.Router) {
@@ -123,6 +138,16 @@ func NewRouter(deps RouterDeps) http.Handler {
 			r.Route("/upload", func(r chi.Router) {
 				r.Post("/image", uploadH.handleImage)
 			})
+
+			// Presentation routes: .pptx upload + slide metadata.
+			if presentationH != nil {
+				r.Route("/presentations", func(r chi.Router) {
+					r.Get("/", presentationH.handleList)
+					r.Post("/", presentationH.handleCreate)
+					r.Get("/{id}", presentationH.handleGet)
+					r.Delete("/{id}", presentationH.handleDelete)
+				})
+			}
 
 			// Room routes
 			r.Route("/rooms", func(r chi.Router) {

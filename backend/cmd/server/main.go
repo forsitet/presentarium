@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -17,9 +18,11 @@ import (
 	"presentarium/internal/handler"
 	"presentarium/internal/repository"
 	"presentarium/internal/service"
+	"presentarium/internal/storage"
 	"presentarium/internal/ws"
 	"presentarium/pkg/badwords"
 	"presentarium/pkg/email"
+	"presentarium/pkg/pptx"
 )
 
 func main() {
@@ -55,6 +58,33 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Object storage (MinIO/S3-compatible). Buckets are normally provisioned
+	// by the minio-init compose service; EnsureBuckets is a belt-and-braces
+	// idempotent check that also makes this work when the backend is started
+	// outside compose (e.g. `go run ./cmd/server`).
+	store, err := storage.NewS3(context.Background(), storage.S3Config{
+		Endpoint:       cfg.S3Endpoint,
+		Region:         cfg.S3Region,
+		AccessKeyID:    cfg.S3AccessKeyID,
+		SecretKey:      cfg.S3SecretKey,
+		BucketPublic:   cfg.S3BucketPublic,
+		BucketPrivate:  cfg.S3BucketPrivate,
+		PublicBaseURL:  cfg.S3PublicBaseURL,
+		ForcePathStyle: cfg.S3ForcePathStyle,
+	})
+	if err != nil {
+		slog.Error("failed to init object storage", "error", err)
+		os.Exit(1)
+	}
+	ensureCtx, cancelEnsure := context.WithTimeout(context.Background(), 10*time.Second)
+	if err := store.EnsureBuckets(ensureCtx); err != nil {
+		// Non-fatal: storage may still be reachable for reads. Log loudly so
+		// the operator can investigate auth / network issues.
+		slog.Warn("EnsureBuckets failed — uploads may not work", "error", err)
+	}
+	cancelEnsure()
+	slog.Info("object storage ready", "endpoint", cfg.S3Endpoint, "public_bucket", cfg.S3BucketPublic)
+
 	userRepo := repository.NewPostgresUserRepo(db)
 	pollRepo := repository.NewPostgresPollRepo(db)
 	questionRepo := repository.NewPostgresQuestionRepo(db)
@@ -62,6 +92,7 @@ func main() {
 	participantRepo := repository.NewPostgresParticipantRepo(db)
 	answerRepo := repository.NewPostgresAnswerRepo(db)
 	brainstormRepo := repository.NewPostgresBrainstormRepo(db)
+	presentationRepo := repository.NewPostgresPresentationRepo(db)
 
 	emailSender := email.NewSender(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUser, cfg.SMTPPassword, cfg.SMTPFrom)
 	if emailSender == nil {
@@ -83,9 +114,12 @@ func main() {
 
 	roomSvc := service.NewRoomService(sessionRepo, pollRepo, questionRepo, hub)
 	participantSvc := service.NewParticipantService(participantRepo, sessionRepo, hub)
-	conductSvc := service.NewConductService(questionRepo, sessionRepo, pollRepo, answerRepo, brainstormRepo, hub)
 	historySvc := service.NewHistoryService(sessionRepo, answerRepo, participantRepo, questionRepo)
 	moderationSvc := service.NewModerationService(sessionRepo, answerRepo, brainstormRepo, hub)
+	presentationSvc := service.NewPresentationService(presentationRepo, store, pptx.NewCLIConverter())
+	// conductSvc depends on presentationSvc for handling open_presentation /
+	// change_slide / close_presentation WS messages, so build it after.
+	conductSvc := service.NewConductService(questionRepo, sessionRepo, pollRepo, answerRepo, brainstormRepo, presentationSvc, hub)
 
 	router := handler.NewRouter(handler.RouterDeps{
 		AuthService:         authSvc,
@@ -96,7 +130,9 @@ func main() {
 		ConductService:      conductSvc,
 		HistoryService:      historySvc,
 		ModerationService:   moderationSvc,
+		PresentationService: presentationSvc,
 		WSHandler:           wsHandler,
+		Storage:             store,
 		JWTSecret:           cfg.JWTSecret,
 		RefreshTokenTTLDays: cfg.JWTRefreshTokenTTL,
 		UploadsDir:          cfg.UploadsDir,

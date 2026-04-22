@@ -58,8 +58,11 @@ func NewParticipantService(
 // Otherwise a new participant is created in the database.
 func (s *participantService) OnJoin(c *ws.Client, room *ws.Room) {
 	if c.Role() != ws.RoleParticipant {
-		// Organizer joined — send a simple connected message.
+		// Organizer joined — send a simple connected message and replay any
+		// active presentation snapshot so a reconnecting organizer doesn't
+		// lose their slide context.
 		sendConnected(c, nil, ws.RoleOrganizer)
+		sendActivePresentationSnapshot(c, room)
 		return
 	}
 
@@ -105,12 +108,36 @@ func (s *participantService) OnJoin(c *ws.Client, room *ws.Room) {
 	// Send connected envelope with session_token.
 	sendConnected(c, &participant.SessionToken, ws.RoleParticipant)
 
+	// If the room already has an open presentation, replay the snapshot so
+	// late-joiners and reconnecting participants see the current slide
+	// immediately without waiting for the next change_slide broadcast.
+	sendActivePresentationSnapshot(c, room)
+
 	// Notify the organizer that a new participant joined.
 	if msg, err := ws.NewEnvelope(ws.MsgTypeParticipantJoined, ws.ParticipantData{
 		ID:   participant.ID,
 		Name: participant.Name,
 	}); err == nil {
 		room.SendToOrganizer(msg)
+	}
+}
+
+// sendActivePresentationSnapshot replays the currently-open presentation to the
+// given client (if any). Used on join/reconnect so state is not lost.
+func sendActivePresentationSnapshot(c *ws.Client, room *ws.Room) {
+	active := room.ActivePresentation()
+	if active == nil {
+		return
+	}
+	payload := ws.PresentationOpenedData{
+		PresentationID:       active.ID,
+		Title:                active.Title,
+		SlideCount:           active.SlideCount,
+		CurrentSlidePosition: active.CurrentPosition,
+		Slides:               active.Slides,
+	}
+	if msg, err := ws.NewEnvelope(ws.MsgTypePresentationOpened, payload); err == nil {
+		room.SendToClient(c, msg)
 	}
 }
 

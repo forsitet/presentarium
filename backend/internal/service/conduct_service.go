@@ -34,30 +34,36 @@ type ConductService interface {
 }
 
 type conductService struct {
-	questionRepo   repository.QuestionRepository
-	sessionRepo    repository.SessionRepository
-	pollRepo       repository.PollRepository
-	answerRepo     repository.AnswerRepository
-	brainstormRepo repository.BrainstormRepository
-	hub            *ws.Hub
+	questionRepo    repository.QuestionRepository
+	sessionRepo     repository.SessionRepository
+	pollRepo        repository.PollRepository
+	answerRepo      repository.AnswerRepository
+	brainstormRepo  repository.BrainstormRepository
+	presentationSvc PresentationService
+	hub             *ws.Hub
 }
 
 // NewConductService creates a new ConductService.
+// presentationSvc may be nil — in that case presentation WS messages produce
+// an error response but the rest of the service behaves normally. This keeps
+// the dependency optional for tests that don't exercise the presentation flow.
 func NewConductService(
 	questionRepo repository.QuestionRepository,
 	sessionRepo repository.SessionRepository,
 	pollRepo repository.PollRepository,
 	answerRepo repository.AnswerRepository,
 	brainstormRepo repository.BrainstormRepository,
+	presentationSvc PresentationService,
 	hub *ws.Hub,
 ) ConductService {
 	return &conductService{
-		questionRepo:   questionRepo,
-		sessionRepo:    sessionRepo,
-		pollRepo:       pollRepo,
-		answerRepo:     answerRepo,
-		brainstormRepo: brainstormRepo,
-		hub:            hub,
+		questionRepo:    questionRepo,
+		sessionRepo:     sessionRepo,
+		pollRepo:        pollRepo,
+		answerRepo:      answerRepo,
+		brainstormRepo:  brainstormRepo,
+		presentationSvc: presentationSvc,
+		hub:             hub,
 	}
 }
 
@@ -80,6 +86,12 @@ func (s *conductService) HandleMessage(c *ws.Client, room *ws.Room, env ws.Envel
 		s.handleBrainstormHideIdea(c, room, env)
 	case ws.MsgTypeBrainstormChangePhase:
 		s.handleBrainstormChangePhase(c, room, env)
+	case ws.MsgTypeOpenPresentation:
+		s.handleOpenPresentation(c, room, env)
+	case ws.MsgTypeChangeSlide:
+		s.handleChangeSlide(c, room, env)
+	case ws.MsgTypeClosePresentation:
+		s.handleClosePresentation(c, room)
 	}
 }
 
@@ -932,6 +944,154 @@ func (s *conductService) handleBrainstormChangePhase(c *ws.Client, room *ws.Room
 	if msg, err := ws.NewEnvelope(ws.MsgTypeBrainstormPhaseChanged, phaseData); err == nil {
 		room.Broadcast(msg)
 	}
+}
+
+// handleOpenPresentation loads a presentation, verifies organizer ownership +
+// "ready" status, records the active state on the session row and in the Room,
+// then broadcasts the full snapshot (with resolved slide URLs) to everyone.
+func (s *conductService) handleOpenPresentation(c *ws.Client, room *ws.Room, env ws.Envelope) {
+	if s.presentationSvc == nil {
+		sendError(room, c, "presentations not available on this server")
+		return
+	}
+	userID := c.UserID()
+	if userID == nil {
+		sendError(room, c, "organizer identity unknown")
+		return
+	}
+
+	var data ws.OpenPresentationData
+	if err := json.Unmarshal(env.Data, &data); err != nil {
+		sendError(room, c, "invalid open_presentation payload")
+		return
+	}
+
+	ctx := context.Background()
+	detail, err := s.presentationSvc.Get(ctx, *userID, data.PresentationID)
+	if err != nil {
+		if errors.Is(err, errs.ErrForbidden) {
+			sendError(room, c, "not your presentation")
+			return
+		}
+		if errors.Is(err, errs.ErrNotFound) {
+			sendError(room, c, "presentation not found")
+			return
+		}
+		sendError(room, c, "failed to load presentation")
+		return
+	}
+	if detail.Status != "ready" {
+		sendError(room, c, "presentation is not ready")
+		return
+	}
+	if len(detail.Slides) == 0 {
+		sendError(room, c, "presentation has no slides")
+		return
+	}
+
+	// Normalise the starting slide position to the [1..N] range.
+	startPos := data.SlidePosition
+	if startPos < 1 {
+		startPos = 1
+	}
+	if startPos > len(detail.Slides) {
+		startPos = len(detail.Slides)
+	}
+
+	// Build the Room-level snapshot — resolved URLs included so participants
+	// (who have no HTTP/JWT access to /api/presentations) get everything over WS.
+	slideInfos := make([]ws.SlideInfo, 0, len(detail.Slides))
+	for _, sl := range detail.Slides {
+		slideInfos = append(slideInfos, ws.SlideInfo{
+			ID:       sl.ID,
+			Position: sl.Position,
+			ImageURL: sl.ImageURL,
+			Width:    sl.Width,
+			Height:   sl.Height,
+		})
+	}
+	active := &ws.ActivePresentation{
+		ID:              detail.ID,
+		Title:           detail.Title,
+		SlideCount:      len(slideInfos),
+		CurrentPosition: startPos,
+		Slides:          slideInfos,
+	}
+	room.SetActivePresentation(active)
+
+	// Persist so the state survives server restarts.
+	presID := detail.ID
+	if err := s.sessionRepo.UpdateActivePresentation(ctx, room.SessionID(), &presID, &startPos); err != nil {
+		slog.Warn("persist active_presentation", "session_id", room.SessionID(), "error", err)
+	}
+
+	payload := ws.PresentationOpenedData{
+		PresentationID:       active.ID,
+		Title:                active.Title,
+		SlideCount:           active.SlideCount,
+		CurrentSlidePosition: active.CurrentPosition,
+		Slides:               active.Slides,
+	}
+	if msg, err := ws.NewEnvelope(ws.MsgTypePresentationOpened, payload); err == nil {
+		room.Broadcast(msg)
+	}
+	slog.Info("presentation opened",
+		"room_code", room.Code(), "presentation_id", active.ID, "slides", active.SlideCount)
+}
+
+// handleChangeSlide validates the requested slide position, updates session +
+// Room state, and broadcasts slide_changed.
+func (s *conductService) handleChangeSlide(c *ws.Client, room *ws.Room, env ws.Envelope) {
+	var data ws.ChangeSlideData
+	if err := json.Unmarshal(env.Data, &data); err != nil {
+		sendError(room, c, "invalid change_slide payload")
+		return
+	}
+
+	active := room.ActivePresentation()
+	if active == nil {
+		sendError(room, c, "no active presentation")
+		return
+	}
+	if !room.SetSlidePosition(data.SlidePosition) {
+		sendError(room, c, fmt.Sprintf("slide position out of range (1..%d)", active.SlideCount))
+		return
+	}
+
+	// Persist on a best-effort basis. A write failure should not block the
+	// live broadcast — the in-memory state is authoritative while the room
+	// is alive; the DB is only used to restore state on restart.
+	pos := data.SlidePosition
+	presID := active.ID
+	if err := s.sessionRepo.UpdateActivePresentation(context.Background(), room.SessionID(), &presID, &pos); err != nil {
+		slog.Warn("persist slide position", "session_id", room.SessionID(), "error", err)
+	}
+
+	if msg, err := ws.NewEnvelope(ws.MsgTypeSlideChanged, ws.SlideChangedData{
+		SlidePosition: data.SlidePosition,
+	}); err == nil {
+		room.Broadcast(msg)
+	}
+}
+
+// handleClosePresentation clears the active presentation from both the session
+// row and the Room, then broadcasts presentation_closed.
+func (s *conductService) handleClosePresentation(c *ws.Client, room *ws.Room) {
+	if room.ActivePresentation() == nil {
+		sendError(room, c, "no active presentation")
+		return
+	}
+
+	room.ClearActivePresentation()
+
+	if err := s.sessionRepo.UpdateActivePresentation(context.Background(), room.SessionID(), nil, nil); err != nil {
+		slog.Warn("clear active_presentation", "session_id", room.SessionID(), "error", err)
+	}
+
+	if msg, err := ws.NewEnvelope(ws.MsgTypePresentationClosed, nil); err == nil {
+		room.Broadcast(msg)
+	}
+	slog.Info("presentation closed", "room_code", room.Code())
 }
 
 // sendError sends an error envelope to the given client via the room.

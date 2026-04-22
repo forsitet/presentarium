@@ -84,14 +84,45 @@ type Question struct {
 
 // Session represents a live quiz session (room).
 type Session struct {
-	ID            uuid.UUID   `db:"id"             json:"id"`
-	PollID        uuid.UUID   `db:"poll_id"        json:"poll_id"`
-	RoomCode      string      `db:"room_code"      json:"room_code"`
-	Status        string      `db:"status"         json:"status"`
-	QuestionOrder interface{} `db:"question_order" json:"question_order"`
-	StartedAt     *time.Time  `db:"started_at"     json:"started_at"`
-	FinishedAt    *time.Time  `db:"finished_at"    json:"finished_at"`
-	CreatedAt     time.Time   `db:"created_at"     json:"created_at"`
+	ID                   uuid.UUID   `db:"id"                       json:"id"`
+	PollID               uuid.UUID   `db:"poll_id"                  json:"poll_id"`
+	RoomCode             string      `db:"room_code"                json:"room_code"`
+	Status               string      `db:"status"                   json:"status"`
+	QuestionOrder        interface{} `db:"question_order"           json:"question_order"`
+	ActivePresentationID *uuid.UUID  `db:"active_presentation_id"   json:"active_presentation_id"`
+	CurrentSlidePosition *int        `db:"current_slide_position"   json:"current_slide_position"`
+	StartedAt            *time.Time  `db:"started_at"               json:"started_at"`
+	FinishedAt           *time.Time  `db:"finished_at"              json:"finished_at"`
+	CreatedAt            time.Time   `db:"created_at"               json:"created_at"`
+}
+
+// Presentation represents a PowerPoint uploaded by an organizer. Its slides
+// are converted to WebP images and served during live sessions.
+type Presentation struct {
+	ID               uuid.UUID `db:"id"                 json:"id"`
+	UserID           uuid.UUID `db:"user_id"            json:"user_id"`
+	Title            string    `db:"title"              json:"title"`
+	OriginalFilename string    `db:"original_filename"  json:"original_filename"`
+	SourceKey        string    `db:"source_key"         json:"-"`
+	SlideCount       int       `db:"slide_count"        json:"slide_count"`
+	Status           string    `db:"status"             json:"status"`
+	ErrorMessage     string    `db:"error_message"      json:"error_message,omitempty"`
+	CreatedAt        time.Time `db:"created_at"         json:"created_at"`
+	UpdatedAt        time.Time `db:"updated_at"         json:"updated_at"`
+}
+
+// PresentationSlide represents a single converted slide. ImageKey/ThumbKey are
+// S3 object keys; the full URL is built by Storage.PublicURL() at read time.
+type PresentationSlide struct {
+	ID             uuid.UUID `db:"id"               json:"id"`
+	PresentationID uuid.UUID `db:"presentation_id"  json:"presentation_id"`
+	Position       int       `db:"position"         json:"position"`
+	ImageKey       string    `db:"image_key"        json:"-"`
+	ThumbKey       string    `db:"thumb_key"        json:"-"`
+	Width          int       `db:"width"            json:"width"`
+	Height         int       `db:"height"           json:"height"`
+	Notes          string    `db:"notes"            json:"notes,omitempty"`
+	CreatedAt      time.Time `db:"created_at"       json:"created_at"`
 }
 
 // Participant represents a quiz participant in a session.

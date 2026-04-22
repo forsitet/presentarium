@@ -66,6 +66,11 @@ type SessionRepository interface {
 	GetByIDWithPoll(ctx context.Context, sessionID uuid.UUID) (*SessionWithPollRow, error)
 	// GetByParticipantToken returns session summary for the participant identified by session_token.
 	GetByParticipantToken(ctx context.Context, sessionToken uuid.UUID) (*ParticipantSessionSummaryRow, error)
+	// UpdateActivePresentation updates the currently-open presentation and slide
+	// position on a session. Pass presentationID=nil + position=nil to clear both
+	// columns (presentation closed). If position is nil but presentationID is
+	// set, the slide position defaults to 1.
+	UpdateActivePresentation(ctx context.Context, sessionID uuid.UUID, presentationID *uuid.UUID, position *int) error
 }
 
 type postgresSessionRepo struct {
@@ -178,6 +183,37 @@ func (r *postgresSessionRepo) GetByIDWithPoll(ctx context.Context, sessionID uui
 		return nil, err
 	}
 	return &row, nil
+}
+
+func (r *postgresSessionRepo) UpdateActivePresentation(ctx context.Context, sessionID uuid.UUID, presentationID *uuid.UUID, position *int) error {
+	// If a presentation is provided without a position, start from slide 1.
+	var pos *int
+	if presentationID != nil {
+		if position != nil {
+			pos = position
+		} else {
+			one := 1
+			pos = &one
+		}
+	}
+	// When clearing (presentationID nil), force position NULL.
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE sessions
+		    SET active_presentation_id = $2,
+		        current_slide_position = $3
+		  WHERE id = $1`,
+		sessionID, presentationID, pos)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return errs.ErrNotFound
+	}
+	return nil
 }
 
 func (r *postgresSessionRepo) GetByParticipantToken(ctx context.Context, sessionToken uuid.UUID) (*ParticipantSessionSummaryRow, error) {

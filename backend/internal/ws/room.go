@@ -35,6 +35,19 @@ type ActiveQuestion struct {
 	Points       int    // question base points
 }
 
+// ActivePresentation holds runtime state for the currently displayed presentation.
+// Mirrors the on-disk session row so late-joiners / reconnects can restore the
+// current slide without hitting the DB. The Slides slice is a denormalised copy
+// of the slide list (including resolved public URLs) so participants who lack
+// JWT auth still receive everything they need to render over WS alone.
+type ActivePresentation struct {
+	ID              uuid.UUID
+	Title           string
+	SlideCount      int
+	CurrentPosition int
+	Slides          []SlideInfo
+}
+
 // Room represents a live session room managed by the Hub.
 type Room struct {
 	mu              sync.RWMutex
@@ -57,6 +70,10 @@ type Room struct {
 	brainstormPhase      string              // collecting | voting | results
 	brainstormIdeaCounts map[uuid.UUID]int   // participantID -> idea count
 	brainstormVoteCounts map[uuid.UUID]int   // participantID -> vote count
+
+	// activePresentation holds the currently-opened presentation (nil = none).
+	// Protected by the same mutex as the rest of Room state.
+	activePresentation *ActivePresentation
 }
 
 // newRoom creates a new Room in the waiting state.
@@ -409,4 +426,63 @@ func (r *Room) ForEachParticipant(fn func(*Client)) {
 			fn(c)
 		}
 	}
+}
+
+// ActivePresentation returns the currently-open presentation, or nil if none.
+// The returned pointer is a defensive copy — mutating it does not affect room
+// state (callers should use SetSlidePosition / ClearActivePresentation).
+func (r *Room) ActivePresentation() *ActivePresentation {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if r.activePresentation == nil {
+		return nil
+	}
+	cp := *r.activePresentation
+	// Deep-copy the slides slice so outside callers can't race with writers.
+	if len(r.activePresentation.Slides) > 0 {
+		cp.Slides = make([]SlideInfo, len(r.activePresentation.Slides))
+		copy(cp.Slides, r.activePresentation.Slides)
+	}
+	return &cp
+}
+
+// SetActivePresentation stores the presentation as the currently-open one.
+// Replaces any previous presentation state. Passing nil clears the state
+// (equivalent to ClearActivePresentation).
+func (r *Room) SetActivePresentation(p *ActivePresentation) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if p == nil {
+		r.activePresentation = nil
+		return
+	}
+	cp := *p
+	if len(p.Slides) > 0 {
+		cp.Slides = make([]SlideInfo, len(p.Slides))
+		copy(cp.Slides, p.Slides)
+	}
+	r.activePresentation = &cp
+}
+
+// ClearActivePresentation unsets the currently-open presentation.
+func (r *Room) ClearActivePresentation() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.activePresentation = nil
+}
+
+// SetSlidePosition updates the current slide position on the active
+// presentation. Returns false if no presentation is active or if position is
+// out of bounds (so callers can send a typed error).
+func (r *Room) SetSlidePosition(position int) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.activePresentation == nil {
+		return false
+	}
+	if position < 1 || position > r.activePresentation.SlideCount {
+		return false
+	}
+	r.activePresentation.CurrentPosition = position
+	return true
 }
