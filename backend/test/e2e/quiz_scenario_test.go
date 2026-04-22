@@ -35,7 +35,9 @@ import (
 	"presentarium/internal/handler"
 	"presentarium/internal/repository"
 	"presentarium/internal/service"
+	"presentarium/internal/storage"
 	"presentarium/internal/ws"
+	"presentarium/pkg/pptx/pptxtest"
 )
 
 // testServer holds the in-process HTTP+WS server and its DB handle.
@@ -76,6 +78,7 @@ func setupTestServer(t *testing.T) *testServer {
 	participantRepo := repository.NewPostgresParticipantRepo(db)
 	answerRepo := repository.NewPostgresAnswerRepo(db)
 	brainstormRepo := repository.NewPostgresBrainstormRepo(db)
+	presentationRepo := repository.NewPostgresPresentationRepo(db)
 
 	authSvc := service.NewAuthService(userRepo, jwtSecret, 60, 7, nil)
 	pollSvc := service.NewPollService(pollRepo)
@@ -86,9 +89,11 @@ func setupTestServer(t *testing.T) *testServer {
 
 	roomSvc := service.NewRoomService(sessionRepo, pollRepo, questionRepo, hub)
 	participantSvc := service.NewParticipantService(participantRepo, sessionRepo, hub)
-	conductSvc := service.NewConductService(questionRepo, sessionRepo, pollRepo, answerRepo, brainstormRepo, hub)
 	historySvc := service.NewHistoryService(sessionRepo, answerRepo, participantRepo, questionRepo)
 	moderationSvc := service.NewModerationService(sessionRepo, answerRepo, brainstormRepo, hub)
+	memStore := storage.NewMemStorage("http://test.local/public")
+	presentationSvc := service.NewPresentationService(presentationRepo, memStore, &pptxtest.FakeConverter{})
+	conductSvc := service.NewConductService(questionRepo, sessionRepo, pollRepo, answerRepo, brainstormRepo, presentationSvc, hub)
 
 	router := handler.NewRouter(handler.RouterDeps{
 		AuthService:         authSvc,
@@ -99,7 +104,9 @@ func setupTestServer(t *testing.T) *testServer {
 		ConductService:      conductSvc,
 		HistoryService:      historySvc,
 		ModerationService:   moderationSvc,
+		PresentationService: presentationSvc,
 		WSHandler:           wsHandler,
+		Storage:             memStore,
 		JWTSecret:           jwtSecret,
 		RefreshTokenTTLDays: 7,
 		UploadsDir:          t.TempDir(),

@@ -25,6 +25,9 @@ const (
 	MsgTypeBrainstormVoteUpdated  = "brainstorm_vote_updated"
 	MsgTypeSessionEnd             = "session_end"
 	MsgTypeAnswerHidden           = "answer_hidden"
+	MsgTypePresentationOpened     = "presentation_opened"
+	MsgTypeSlideChanged           = "slide_changed"
+	MsgTypePresentationClosed     = "presentation_closed"
 	MsgTypeError                  = "error"
 )
 
@@ -39,6 +42,9 @@ const (
 	MsgTypeHideAnswer            = "hide_answer"
 	MsgTypeBrainstormHideIdea    = "brainstorm_hide_idea"
 	MsgTypeBrainstormChangePhase = "brainstorm_change_phase"
+	MsgTypeOpenPresentation      = "open_presentation"
+	MsgTypeChangeSlide           = "change_slide"
+	MsgTypeClosePresentation     = "close_presentation"
 )
 
 // Envelope is the wire format for all WebSocket messages.
@@ -225,4 +231,45 @@ type BrainstormHideIdeaData struct {
 // BrainstormChangePhaseData is sent by the organizer to advance the brainstorm phase.
 type BrainstormChangePhaseData struct {
 	Phase string `json:"phase"`
+}
+
+// OpenPresentationData is sent by the organizer to display a presentation
+// to all participants. SlidePosition is 1-indexed; omit or pass 1 to start
+// from the first slide.
+type OpenPresentationData struct {
+	PresentationID uuid.UUID `json:"presentation_id"`
+	SlidePosition  int       `json:"slide_position,omitempty"`
+}
+
+// ChangeSlideData is sent by the organizer to jump to a different slide in
+// the currently-open presentation. SlidePosition is 1-indexed.
+type ChangeSlideData struct {
+	SlidePosition int `json:"slide_position"`
+}
+
+// --- Presentation outgoing payloads ---
+
+// SlideInfo is a single slide's renderable metadata sent over WS.
+type SlideInfo struct {
+	ID       uuid.UUID `json:"id"`
+	Position int       `json:"position"`
+	ImageURL string    `json:"image_url"`
+	Width    int       `json:"width"`
+	Height   int       `json:"height"`
+}
+
+// PresentationOpenedData is broadcast when the organizer opens a presentation
+// AND is replayed as a snapshot to any client that connects while a
+// presentation is already active.
+type PresentationOpenedData struct {
+	PresentationID       uuid.UUID   `json:"presentation_id"`
+	Title                string      `json:"title"`
+	SlideCount           int         `json:"slide_count"`
+	CurrentSlidePosition int         `json:"current_slide_position"`
+	Slides               []SlideInfo `json:"slides"`
+}
+
+// SlideChangedData is broadcast when the organizer jumps to a different slide.
+type SlideChangedData struct {
+	SlidePosition int `json:"slide_position"`
 }

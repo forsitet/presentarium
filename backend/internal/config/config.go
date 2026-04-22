@@ -33,6 +33,16 @@ type Config struct {
 	// Uploads
 	UploadsDir string `env:"UPLOADS_DIR" envDefault:"./uploads"`
 
+	// Object storage (S3-compatible: MinIO in dev/prod, also works against R2/AWS)
+	S3Endpoint       string `env:"S3_ENDPOINT" envDefault:"http://localhost:9000"`
+	S3Region         string `env:"S3_REGION" envDefault:"us-east-1"`
+	S3AccessKeyID    string `env:"S3_ACCESS_KEY_ID" envDefault:""`
+	S3SecretKey      string `env:"S3_SECRET_ACCESS_KEY" envDefault:""`
+	S3BucketPublic   string `env:"S3_BUCKET_PUBLIC" envDefault:"presentarium-public"`
+	S3BucketPrivate  string `env:"S3_BUCKET_PRIVATE" envDefault:"presentarium-private"`
+	S3PublicBaseURL  string `env:"S3_PUBLIC_BASE_URL" envDefault:""`
+	S3ForcePathStyle bool   `env:"S3_FORCE_PATH_STYLE" envDefault:"true"`
+
 	// Migrations
 	MigrationsPath string `env:"MIGRATIONS_PATH" envDefault:"migrations"`
 

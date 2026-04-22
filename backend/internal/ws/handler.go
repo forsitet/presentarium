@@ -152,7 +152,8 @@ func (h *Handler) dispatch(c *Client, raw []byte) {
 	// Basic authorization guard: only organizer may send organizer-only messages.
 	switch env.Type {
 	case MsgTypeShowQuestion, MsgTypeEndQuestion,
-		MsgTypeHideAnswer, MsgTypeBrainstormHideIdea, MsgTypeBrainstormChangePhase:
+		MsgTypeHideAnswer, MsgTypeBrainstormHideIdea, MsgTypeBrainstormChangePhase,
+		MsgTypeOpenPresentation, MsgTypeChangeSlide, MsgTypeClosePresentation:
 		if c.role != RoleOrganizer {
 			h.sendError(c, "unauthorized: organizer only")
 			return
