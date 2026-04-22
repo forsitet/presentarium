@@ -2,10 +2,12 @@ import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { PollCard } from '../components/PollCard'
 import { ConfirmDialog } from '../components/ConfirmDialog'
+import { PresentationUploader } from '../components/PresentationUploader'
 import { useAuthStore } from '../stores/authStore'
 import { getPolls, deletePoll, copyPoll, createRoom, getSessions } from '../api/polls'
+import { listPresentations, deletePresentation } from '../api/presentations'
 import { apiClient } from '../api/client'
-import type { Poll, SessionSummary } from '../types'
+import type { Poll, SessionSummary, Presentation } from '../types'
 
 function PollCardSkeleton() {
   return (
@@ -106,11 +108,161 @@ function SessionHistoryTab() {
   )
 }
 
+function PresentationsTab() {
+  const [presentations, setPresentations] = useState<Presentation[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [showUploader, setShowUploader] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const data = await listPresentations()
+      setPresentations(data)
+    } catch {
+      setError('Не удалось загрузить список презентаций')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    load()
+  }, [load])
+
+  const handleUploaded = (p: Presentation) => {
+    setPresentations((prev) => [p, ...prev.filter((x) => x.id !== p.id)])
+    setShowUploader(false)
+  }
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return
+    try {
+      await deletePresentation(deleteTarget)
+      setPresentations((prev) => prev.filter((p) => p.id !== deleteTarget))
+    } catch {
+      setError('Не удалось удалить презентацию')
+    } finally {
+      setDeleteTarget(null)
+    }
+  }
+
+  const formatDate = (iso: string) =>
+    new Date(iso).toLocaleDateString('ru-RU', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    })
+
+  return (
+    <div>
+      {/* Uploader block — always visible at top, collapsible */}
+      {!showUploader ? (
+        <button
+          onClick={() => setShowUploader(true)}
+          className="w-full mb-4 px-4 py-3 bg-white border-2 border-dashed border-gray-300 rounded-xl text-sm font-medium text-gray-600 hover:border-indigo-300 hover:bg-indigo-50/50 hover:text-indigo-600 transition-colors"
+        >
+          + Загрузить презентацию
+        </button>
+      ) : (
+        <div className="mb-4">
+          <PresentationUploader
+            onUploaded={handleUploaded}
+            onCancel={() => setShowUploader(false)}
+          />
+        </div>
+      )}
+
+      {error && (
+        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 flex justify-between">
+          <span>{error}</span>
+          <button onClick={() => setError(null)} className="ml-4 text-red-400 hover:text-red-600">
+            ✕
+          </button>
+        </div>
+      )}
+
+      {loading && (
+        <div className="space-y-2 animate-pulse">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-16 bg-gray-100 rounded-xl" />
+          ))}
+        </div>
+      )}
+
+      {!loading && presentations.length === 0 && !showUploader && (
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <div className="w-16 h-16 mb-4 rounded-full bg-indigo-50 flex items-center justify-center text-3xl">
+            📽
+          </div>
+          <h3 className="text-lg font-semibold text-gray-700 mb-1">Пока нет презентаций</h3>
+          <p className="text-sm text-gray-400">
+            Загрузите .pptx, чтобы показывать слайды участникам во время опроса
+          </p>
+        </div>
+      )}
+
+      {!loading && presentations.length > 0 && (
+        <div className="space-y-2">
+          {presentations.map((p) => {
+            const isReady = p.status === 'ready'
+            const isFailed = p.status === 'failed'
+            const isProcessing = p.status === 'processing'
+            return (
+              <div
+                key={p.id}
+                className="bg-white rounded-xl border border-gray-100 p-4 flex items-center gap-3 hover:border-indigo-200 transition-colors"
+              >
+                <div className="w-10 h-10 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center text-xl shrink-0">
+                  📽
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-900 truncate">
+                    {p.title}
+                  </p>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {isReady && `${p.slide_count} слайд(ов) · ${formatDate(p.created_at)}`}
+                    {isProcessing && 'Обрабатывается…'}
+                    {isFailed && (p.error_message || 'Ошибка конвертации')}
+                  </p>
+                </div>
+                {isProcessing && (
+                  <div className="w-4 h-4 rounded-full border-2 border-indigo-200 border-t-indigo-500 animate-spin" />
+                )}
+                {isFailed && <span className="text-red-500 text-sm">⚠</span>}
+                <button
+                  onClick={() => setDeleteTarget(p.id)}
+                  className="px-2 py-1.5 text-sm rounded-lg border border-red-200 text-red-500 hover:bg-red-50 transition-colors"
+                  title="Удалить"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                </button>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {deleteTarget && (
+        <ConfirmDialog
+          title="Удалить презентацию?"
+          message="Файл и все слайды будут удалены безвозвратно."
+          confirmLabel="Удалить"
+          onConfirm={handleDelete}
+          onCancel={() => setDeleteTarget(null)}
+        />
+      )}
+    </div>
+  )
+}
+
 export function DashboardPage() {
   const navigate = useNavigate()
   const { user, logout } = useAuthStore()
 
-  const [tab, setTab] = useState<'polls' | 'history'>('polls')
+  const [tab, setTab] = useState<'polls' | 'presentations' | 'history'>('polls')
   const [polls, setPolls] = useState<Poll[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -215,6 +367,16 @@ export function DashboardPage() {
               Мои опросы
             </button>
             <button
+              onClick={() => setTab('presentations')}
+              className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                tab === 'presentations'
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              Презентации
+            </button>
+            <button
               onClick={() => setTab('history')}
               className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${
                 tab === 'history'
@@ -236,6 +398,8 @@ export function DashboardPage() {
         </div>
 
         {tab === 'history' && <SessionHistoryTab />}
+
+        {tab === 'presentations' && <PresentationsTab />}
 
         {tab === 'polls' && (
           <>
