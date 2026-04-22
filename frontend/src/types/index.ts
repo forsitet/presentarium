@@ -91,3 +91,54 @@ export interface ParticipantHistorySummary {
   my_rank: number
   total_participants: number
 }
+
+// ─── Presentations ────────────────────────────────────────────────────────────
+
+export type PresentationStatus = 'processing' | 'ready' | 'failed'
+
+export interface Presentation {
+  id: string
+  user_id: string
+  title: string
+  original_filename: string
+  slide_count: number
+  status: PresentationStatus
+  error_message?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface PresentationSlide {
+  id: string
+  position: number
+  image_url: string
+  thumb_url?: string
+  width: number
+  height: number
+}
+
+export interface PresentationDetail extends Presentation {
+  slides: PresentationSlide[]
+}
+
+// Matches the WS `presentation_opened` payload shape. SlideInfo has no
+// thumb_url field (it's only in HTTP responses).
+export interface WSPresentationSlide {
+  id: string
+  position: number
+  image_url: string
+  width: number
+  height: number
+}
+
+export interface WSPresentationOpened {
+  presentation_id: string
+  title: string
+  slide_count: number
+  current_slide_position: number
+  slides: WSPresentationSlide[]
+}
+
+export interface WSSlideChanged {
+  slide_position: number
+}

@@ -10,7 +10,9 @@ import { AnswerBarChart } from '../components/AnswerBarChart'
 import { Leaderboard } from '../components/Leaderboard'
 import { WordCloudView } from '../components/WordCloudView'
 import { BrainstormBoard } from '../components/BrainstormBoard'
-import type { Participant, Question } from '../types'
+import { PresentationPicker } from '../components/PresentationPicker'
+import { SlideViewer } from '../components/SlideViewer'
+import type { Participant, Question, Presentation, WSPresentationOpened, WSSlideChanged } from '../types'
 
 interface WordCloudWord {
   text: string
@@ -103,6 +105,10 @@ export function HostSessionPage() {
   const [wordcloudWords, setWordcloudWords] = useState<WordCloudWord[]>([])
   const [hiddenWords, setHiddenWords] = useState<Set<string>>(new Set())
 
+  // Presentation state
+  const [activePresentation, setActivePresentation] = useState<WSPresentationOpened | null>(null)
+  const [showPresentationPicker, setShowPresentationPicker] = useState(false)
+
   // Screen transition key — changes on each state/question transition to re-trigger CSS fade-in
   const screenKey = `${roomStatus}-${activeQ?.question_id ?? ''}`
 
@@ -193,6 +199,42 @@ export function HostSessionPage() {
       setError('Не удалось завершить сессию')
     }
   }, [code])
+
+  // ── Presentation controls ──────────────────────────────────────────────────
+  const handlePickPresentation = useCallback((p: Presentation) => {
+    setShowPresentationPicker(false)
+    // Server will broadcast presentation_opened with resolved slide URLs —
+    // we just optimistically request; setActivePresentation happens in WS handler.
+    socket.send('open_presentation', { presentation_id: p.id, slide_position: 1 })
+  }, [])
+
+  const handleSlidePrev = useCallback(() => {
+    if (!activePresentation) return
+    const next = Math.max(1, activePresentation.current_slide_position - 1)
+    if (next === activePresentation.current_slide_position) return
+    socket.send('change_slide', { slide_position: next })
+  }, [activePresentation])
+
+  const handleSlideNext = useCallback(() => {
+    if (!activePresentation) return
+    const next = Math.min(
+      activePresentation.slide_count,
+      activePresentation.current_slide_position + 1,
+    )
+    if (next === activePresentation.current_slide_position) return
+    socket.send('change_slide', { slide_position: next })
+  }, [activePresentation])
+
+  const handleSlideJump = useCallback((position: number) => {
+    if (!activePresentation) return
+    if (position < 1 || position > activePresentation.slide_count) return
+    if (position === activePresentation.current_slide_position) return
+    socket.send('change_slide', { slide_position: position })
+  }, [activePresentation])
+
+  const handleClosePresentation = useCallback(() => {
+    socket.send('close_presentation', {})
+  }, [])
 
   // WebSocket setup — waits for roomReady (getRoomInfo complete) and accessToken.
   // getRoomInfo must finish first so the backend Hub room is guaranteed to exist.
@@ -290,6 +332,21 @@ export function HostSessionPage() {
       setStatus('finished')
     }
 
+    const onPresentationOpened = (data: unknown) => {
+      setActivePresentation(data as WSPresentationOpened)
+    }
+
+    const onSlideChanged = (data: unknown) => {
+      const { slide_position } = data as WSSlideChanged
+      setActivePresentation((prev) =>
+        prev ? { ...prev, current_slide_position: slide_position } : prev,
+      )
+    }
+
+    const onPresentationClosed = () => {
+      setActivePresentation(null)
+    }
+
     socket.on('participant_joined', onParticipantJoined)
     socket.on('participant_left', onParticipantLeft)
     socket.on('room_started', onRoomStarted)
@@ -301,6 +358,9 @@ export function HostSessionPage() {
     socket.on('leaderboard', onLeaderboard)
     socket.on('session_end', onSessionEnd)
     socket.on('wordcloud_update', onWordcloudUpdate)
+    socket.on('presentation_opened', onPresentationOpened)
+    socket.on('slide_changed', onSlideChanged)
+    socket.on('presentation_closed', onPresentationClosed)
 
     return () => {
       socket.off('participant_joined', onParticipantJoined)
@@ -314,6 +374,9 @@ export function HostSessionPage() {
       socket.off('leaderboard', onLeaderboard)
       socket.off('session_end', onSessionEnd)
       socket.off('wordcloud_update', onWordcloudUpdate)
+      socket.off('presentation_opened', onPresentationOpened)
+      socket.off('slide_changed', onSlideChanged)
+      socket.off('presentation_closed', onPresentationClosed)
       socket.disconnect()
       reset()
     }
@@ -327,11 +390,66 @@ export function HostSessionPage() {
     )
   }
 
+  // Shared presentation overlay/picker + floating button. Included as a child
+  // of each branch's top-level wrapper — the fixed-positioned elements will
+  // cover the screen regardless of parent, and the button keeps the control
+  // accessible at every stage of the session.
+  const presentationLayer = (
+    <>
+      {/* Floating toggle button — bottom-right, visible on all screens */}
+      {roomStatus !== 'finished' && (
+        <div className="fixed bottom-6 right-6 z-30 flex flex-col gap-2 items-end">
+          {activePresentation ? (
+            <button
+              onClick={handleClosePresentation}
+              className="bg-red-600 hover:bg-red-500 text-white px-4 py-2.5 rounded-full text-sm font-medium shadow-lg transition-colors flex items-center gap-2"
+              title="Закрыть презентацию для всех"
+            >
+              <span>✕</span>
+              <span className="hidden sm:inline">Закрыть презентацию</span>
+            </button>
+          ) : (
+            <button
+              onClick={() => setShowPresentationPicker(true)}
+              className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2.5 rounded-full text-sm font-medium shadow-lg transition-colors flex items-center gap-2"
+              title="Показать презентацию"
+            >
+              <span>📽</span>
+              <span className="hidden sm:inline">Показать презентацию</span>
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Picker modal */}
+      {showPresentationPicker && (
+        <PresentationPicker
+          onPick={handlePickPresentation}
+          onClose={() => setShowPresentationPicker(false)}
+        />
+      )}
+
+      {/* Full-screen slide viewer — host mode with controls */}
+      {activePresentation && (
+        <SlideViewer
+          title={activePresentation.title}
+          slides={activePresentation.slides}
+          currentPosition={activePresentation.current_slide_position}
+          onPrev={handleSlidePrev}
+          onNext={handleSlideNext}
+          onJump={handleSlideJump}
+          onClose={handleClosePresentation}
+        />
+      )}
+    </>
+  )
+
   // ════════════════════════════════════════════════════════════════
   // WAITING — show QR, code, participant list, Start button
   // ════════════════════════════════════════════════════════════════
   if (roomStatus === 'waiting') {
     return (
+      <>
       <div className="min-h-screen bg-gray-900 text-white">
         <div className="bg-gray-800 border-b border-gray-700 px-6 py-4 flex items-center justify-between">
           <button
@@ -391,6 +509,8 @@ export function HostSessionPage() {
           </div>
         </div>
       </div>
+      {presentationLayer}
+      </>
     )
   }
 
@@ -402,6 +522,7 @@ export function HostSessionPage() {
       ? (questions.find((q) => q.id === questionOrder[0]) ?? null)
       : (questions.slice().sort((a, b) => a.position - b.position)[0] ?? null)
     return (
+      <>
       <div className="min-h-screen bg-gray-900 text-white flex flex-col">
         <div className="bg-gray-800 border-b border-gray-700 px-6 py-4 flex items-center justify-between">
           <span className="text-gray-400 text-sm">
@@ -452,6 +573,8 @@ export function HostSessionPage() {
           </div>
         </div>
       </div>
+      {presentationLayer}
+      </>
     )
   }
 
@@ -466,6 +589,7 @@ export function HostSessionPage() {
     const hasOptions = (activeQ.options?.length ?? 0) > 0
 
     return (
+      <>
       <div className="min-h-screen bg-gray-900 text-white flex flex-col">
         {/* Top bar: progress, timer, answer count, end-early button */}
         <div className="bg-gray-800 border-b border-gray-700 px-3 sm:px-6 py-2 sm:py-3 flex flex-wrap items-center gap-2 sm:gap-4">
@@ -674,6 +798,8 @@ export function HostSessionPage() {
           </div>
         )}
       </div>
+      {presentationLayer}
+      </>
     )
   }
 
@@ -689,6 +815,7 @@ export function HostSessionPage() {
     const hasOptions = displayOptions.length > 0
 
     return (
+      <>
       <div className="min-h-screen bg-gray-900 text-white flex flex-col">
         {/* Top bar with navigation buttons */}
         <div className="bg-gray-800 border-b border-gray-700 px-3 sm:px-6 py-2 sm:py-3 flex flex-wrap items-center justify-between gap-2 sm:gap-4">
@@ -824,6 +951,8 @@ export function HostSessionPage() {
           </div>
         )}
       </div>
+      {presentationLayer}
+      </>
     )
   }
 

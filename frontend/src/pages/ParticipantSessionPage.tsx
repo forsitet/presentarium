@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { socket } from '../ws/socket'
 import { BrainstormInput } from '../components/BrainstormInput'
+import { SlideViewer } from '../components/SlideViewer'
+import type { WSPresentationOpened, WSSlideChanged } from '../types'
 
 type RoomStatus = 'waiting' | 'active' | 'showing_question' | 'showing_results' | 'finished'
 
@@ -105,6 +107,11 @@ export function ParticipantSessionPage() {
 
   // Final session data
   const [finalData, setFinalData] = useState<FinalData | null>(null)
+
+  // Presentation overlay state — when non-null, renders a full-screen slide
+  // viewer on top of whatever screen the participant was on. Server sends a
+  // snapshot on (re)connect so late-joiners restore the current slide.
+  const [activePresentation, setActivePresentation] = useState<WSPresentationOpened | null>(null)
 
   // Floating score popup
   const [scorePopup, setScorePopup] = useState<{ score: number; key: number } | null>(null)
@@ -228,6 +235,21 @@ export function ParticipantSessionPage() {
       }
     }
 
+    const onPresentationOpened = (data: unknown) => {
+      setActivePresentation(data as WSPresentationOpened)
+    }
+
+    const onSlideChanged = (data: unknown) => {
+      const { slide_position } = data as WSSlideChanged
+      setActivePresentation((prev) =>
+        prev ? { ...prev, current_slide_position: slide_position } : prev,
+      )
+    }
+
+    const onPresentationClosed = () => {
+      setActivePresentation(null)
+    }
+
     socket.on('room_state_changed', onStateChanged)
     socket.on('question_start', onQuestionStart)
     socket.on('timer_tick', onTimerTick)
@@ -235,6 +257,9 @@ export function ParticipantSessionPage() {
     socket.on('question_end', onQuestionEnd)
     socket.on('leaderboard', onLeaderboard)
     socket.on('session_end', onSessionEnd)
+    socket.on('presentation_opened', onPresentationOpened)
+    socket.on('slide_changed', onSlideChanged)
+    socket.on('presentation_closed', onPresentationClosed)
 
     return () => {
       socket.off('room_state_changed', onStateChanged)
@@ -244,6 +269,9 @@ export function ParticipantSessionPage() {
       socket.off('question_end', onQuestionEnd)
       socket.off('leaderboard', onLeaderboard)
       socket.off('session_end', onSessionEnd)
+      socket.off('presentation_opened', onPresentationOpened)
+      socket.off('slide_changed', onSlideChanged)
+      socket.off('presentation_closed', onPresentationClosed)
     }
   }, [code, navigate])
 
@@ -289,35 +317,54 @@ export function ParticipantSessionPage() {
 
   // ---- Render ----
 
+  // Full-screen slide overlay — read-only viewer. Rendered BEFORE the early
+  // returns so it participates in every branch via React fragments. The
+  // fixed-position SlideViewer has z-index 40 so it covers whatever screen
+  // was previously shown (waiting screen, active question, results, etc).
+  const slideOverlay = activePresentation ? (
+    <SlideViewer
+      title={activePresentation.title}
+      slides={activePresentation.slides}
+      currentPosition={activePresentation.current_slide_position}
+    />
+  ) : null
+
   if (status === 'finished') {
     return (
-      <FinalScreen
-        key={screenKey}
-        finalData={finalData}
-        totalParticipants={totalParticipants}
-        onHome={() => navigate('/join')}
-      />
+      <>
+        <FinalScreen
+          key={screenKey}
+          finalData={finalData}
+          totalParticipants={totalParticipants}
+          onHome={() => navigate('/join')}
+        />
+        {slideOverlay}
+      </>
     )
   }
 
   if (status === 'showing_results' && question) {
     return (
-      <ResultsScreen
-        key={screenKey}
-        question={question}
-        revealedOptions={revealedOptions}
-        answerResult={answerResult}
-        selectedSingle={selectedSingle}
-        selectedMultiple={selectedMultiple}
-        myRank={myRank}
-        myScore={myScore}
-        totalParticipants={totalParticipants}
-      />
+      <>
+        <ResultsScreen
+          key={screenKey}
+          question={question}
+          revealedOptions={revealedOptions}
+          answerResult={answerResult}
+          selectedSingle={selectedSingle}
+          selectedMultiple={selectedMultiple}
+          myRank={myRank}
+          myScore={myScore}
+          totalParticipants={totalParticipants}
+        />
+        {slideOverlay}
+      </>
     )
   }
 
   if (status === 'showing_question' && question) {
     return (
+      <>
       <div
         key={screenKey}
         className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 flex flex-col p-4 animate-fade-in-up relative overflow-hidden"
@@ -404,11 +451,14 @@ export function ParticipantSessionPage() {
           </div>
         )}
       </div>
+      {slideOverlay}
+      </>
     )
   }
 
   // Waiting / active state
   return (
+    <>
     <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 flex items-center justify-center p-4">
       <div className="text-center text-white">
         <div className="relative w-24 h-24 mx-auto mb-8">
@@ -436,6 +486,8 @@ export function ParticipantSessionPage() {
         </div>
       </div>
     </div>
+    {slideOverlay}
+    </>
   )
 }
 
