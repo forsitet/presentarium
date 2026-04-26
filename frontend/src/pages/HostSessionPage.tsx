@@ -347,6 +347,15 @@ export function HostSessionPage() {
       setActivePresentation(null)
     }
 
+    // Surface server-side errors (e.g. "вопрос не заполнен") to the organizer
+    // so they aren't left staring at a frozen UI wondering why show_question
+    // didn't start the timer.
+    const onWsError = (data: unknown) => {
+      const msg = (data as { message?: string })?.message ?? 'Ошибка сервера'
+      setError(msg)
+      setTimeout(() => setError((prev) => (prev === msg ? null : prev)), 5000)
+    }
+
     socket.on('participant_joined', onParticipantJoined)
     socket.on('participant_left', onParticipantLeft)
     socket.on('room_started', onRoomStarted)
@@ -361,6 +370,7 @@ export function HostSessionPage() {
     socket.on('presentation_opened', onPresentationOpened)
     socket.on('slide_changed', onSlideChanged)
     socket.on('presentation_closed', onPresentationClosed)
+    socket.on('error', onWsError)
 
     return () => {
       socket.off('participant_joined', onParticipantJoined)
@@ -377,6 +387,7 @@ export function HostSessionPage() {
       socket.off('presentation_opened', onPresentationOpened)
       socket.off('slide_changed', onSlideChanged)
       socket.off('presentation_closed', onPresentationClosed)
+      socket.off('error', onWsError)
       socket.disconnect()
       reset()
     }
@@ -396,6 +407,15 @@ export function HostSessionPage() {
   // accessible at every stage of the session.
   const presentationLayer = (
     <>
+      {/* Floating error toast — top-center, visible in every session state so
+          the organizer always sees server-side errors (e.g. "вопрос не
+          заполнен") regardless of which branch is currently rendered. */}
+      {error && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-red-900/90 border border-red-600 text-red-100 px-5 py-3 rounded-xl shadow-xl text-sm font-medium max-w-md text-center">
+          {error}
+        </div>
+      )}
+
       {/* Floating toggle button — bottom-right, visible on all screens */}
       {roomStatus !== 'finished' && (
         <div className="fixed bottom-6 right-6 z-30 flex flex-col gap-2 items-end">
