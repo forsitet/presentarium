@@ -1,6 +1,7 @@
 package ws
 
 import (
+	"strings"
 	"sync"
 	"testing"
 
@@ -122,9 +123,19 @@ func TestRoom_ResetAnswerCount(t *testing.T) {
 
 // --- Word cloud ---
 
-func TestRoom_AddWordCloudWords_Basic(t *testing.T) {
+// addPhrases is a small test helper that mirrors what conduct_service does:
+// caller computes a normalized key (here: just lowercased) and passes it
+// alongside the original display.
+func addPhrases(r *Room, phrases ...string) {
+	for _, p := range phrases {
+		key := strings.ToLower(strings.TrimSpace(p))
+		r.AddWordCloudPhrase(key, strings.TrimSpace(p))
+	}
+}
+
+func TestRoom_AddWordCloudPhrase_Basic(t *testing.T) {
 	r := newTestRoom()
-	r.AddWordCloudWords([]string{"hello", "world", "hello"})
+	addPhrases(r, "hello", "world", "hello")
 	words := r.WordCloudTopWords(10)
 
 	freq := map[string]int{}
@@ -132,17 +143,56 @@ func TestRoom_AddWordCloudWords_Basic(t *testing.T) {
 		freq[w.Text] = w.Count
 	}
 	if freq["hello"] != 2 {
-		t.Errorf("word 'hello': want count 2, got %d", freq["hello"])
+		t.Errorf("phrase 'hello': want count 2, got %d", freq["hello"])
 	}
 	if freq["world"] != 1 {
-		t.Errorf("word 'world': want count 1, got %d", freq["world"])
+		t.Errorf("phrase 'world': want count 1, got %d", freq["world"])
+	}
+}
+
+func TestRoom_AddWordCloudPhrase_KeepsMultiWordPhrasesIntact(t *testing.T) {
+	r := newTestRoom()
+	addPhrases(r, "искусственный интеллект", "машинное обучение", "искусственный интеллект")
+	words := r.WordCloudTopWords(10)
+
+	if len(words) != 2 {
+		t.Fatalf("expected 2 phrases, got %d (%v)", len(words), words)
+	}
+	freq := map[string]int{}
+	for _, w := range words {
+		freq[w.Text] = w.Count
+	}
+	if freq["искусственный интеллект"] != 2 {
+		t.Errorf("phrase 'искусственный интеллект': want count 2, got %d", freq["искусственный интеллект"])
+	}
+	if freq["машинное обучение"] != 1 {
+		t.Errorf("phrase 'машинное обучение': want count 1, got %d", freq["машинное обучение"])
+	}
+}
+
+func TestRoom_AddWordCloudPhrase_CaseInsensitiveAggregation(t *testing.T) {
+	r := newTestRoom()
+	// Different casings of the same word should aggregate, and the FIRST
+	// submission's display is the one that wins.
+	r.AddWordCloudPhrase("go", "Go")
+	r.AddWordCloudPhrase("go", "GO")
+	r.AddWordCloudPhrase("go", "go")
+
+	words := r.WordCloudTopWords(10)
+	if len(words) != 1 {
+		t.Fatalf("expected 1 aggregated phrase, got %d (%v)", len(words), words)
+	}
+	if words[0].Text != "Go" {
+		t.Errorf("display: want first-seen 'Go', got %q", words[0].Text)
+	}
+	if words[0].Count != 3 {
+		t.Errorf("count: want 3, got %d", words[0].Count)
 	}
 }
 
 func TestRoom_WordCloudTopWords_Order(t *testing.T) {
 	r := newTestRoom()
-	// Add words with different frequencies.
-	r.AddWordCloudWords([]string{"a", "b", "b", "c", "c", "c"})
+	addPhrases(r, "a", "b", "b", "c", "c", "c")
 	words := r.WordCloudTopWords(10)
 
 	if len(words) != 3 {
@@ -162,8 +212,7 @@ func TestRoom_WordCloudTopWords_Order(t *testing.T) {
 
 func TestRoom_WordCloudTopWords_Limit(t *testing.T) {
 	r := newTestRoom()
-	// Add 5 words and request top 3.
-	r.AddWordCloudWords([]string{"a", "b", "b", "c", "c", "c", "d", "d", "d", "d", "e", "e", "e", "e", "e"})
+	addPhrases(r, "a", "b", "b", "c", "c", "c", "d", "d", "d", "d", "e", "e", "e", "e", "e")
 	words := r.WordCloudTopWords(3)
 	if len(words) != 3 {
 		t.Errorf("top 3 limit: want 3, got %d", len(words))
@@ -180,11 +229,29 @@ func TestRoom_WordCloudTopWords_Empty(t *testing.T) {
 
 func TestRoom_ResetAnswerCount_ClearsWordCloud(t *testing.T) {
 	r := newTestRoom()
-	r.AddWordCloudWords([]string{"hello", "world"})
-	r.ResetAnswerCount() // should also reset wordCloudFreq
+	addPhrases(r, "hello", "world")
+	r.ResetAnswerCount() // should also reset wordCloudPhrases
 	words := r.WordCloudTopWords(10)
 	if len(words) != 0 {
 		t.Errorf("after reset: word cloud should be empty, got %d words", len(words))
+	}
+}
+
+func TestRoom_SetWordCloudPhrases_RebuildsFromSnapshot(t *testing.T) {
+	r := newTestRoom()
+	r.SetWordCloudPhrases(map[string]struct {
+		Display string
+		Count   int
+	}{
+		"go": {Display: "Go", Count: 3},
+		"ai": {Display: "AI", Count: 1},
+	})
+	words := r.WordCloudTopWords(10)
+	if len(words) != 2 {
+		t.Fatalf("rebuild: want 2 phrases, got %d", len(words))
+	}
+	if words[0].Text != "Go" || words[0].Count != 3 {
+		t.Errorf("rebuild order/display: want Go(3) first, got %s(%d)", words[0].Text, words[0].Count)
 	}
 }
 
@@ -324,7 +391,7 @@ func TestRoom_ConcurrentWordCloud(t *testing.T) {
 	for i := 0; i < goroutines; i++ {
 		go func() {
 			defer wg.Done()
-			r.AddWordCloudWords([]string{"concurrent"})
+			r.AddWordCloudPhrase("concurrent", "concurrent")
 		}()
 	}
 	wg.Wait()

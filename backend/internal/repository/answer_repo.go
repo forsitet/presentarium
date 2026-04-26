@@ -34,6 +34,11 @@ type AnswerExportRow struct {
 type AnswerRepository interface {
 	// Create stores a new answer. The Answer.Answer field must be JSON-serialisable.
 	Create(ctx context.Context, answer *model.Answer) error
+	// UpdateAnswerPayload rewrites the JSONB `answer` column for an existing
+	// row (matched by ID). Used by question types like word_cloud where a
+	// participant accumulates multiple submissions inside a single row to
+	// stay within the (participant_id, question_id) UNIQUE constraint.
+	UpdateAnswerPayload(ctx context.Context, answerID uuid.UUID, payload []byte) error
 	// GetByParticipantAndQuestion returns the answer for (participant, question), or ErrNotFound.
 	GetByParticipantAndQuestion(ctx context.Context, participantID, questionID uuid.UUID) (*model.Answer, error)
 	// ListByQuestion returns all non-hidden answers for a question in a session.
@@ -84,6 +89,23 @@ func (r *postgresAnswerRepo) Create(ctx context.Context, answer *model.Answer) e
 		answer.AnsweredAt,
 	)
 	return err
+}
+
+func (r *postgresAnswerRepo) UpdateAnswerPayload(ctx context.Context, answerID uuid.UUID, payload []byte) error {
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE answers SET answer = $2 WHERE id = $1`,
+		answerID, payload)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return errs.ErrNotFound
+	}
+	return nil
 }
 
 func (r *postgresAnswerRepo) GetByParticipantAndQuestion(ctx context.Context, participantID, questionID uuid.UUID) (*model.Answer, error) {
