@@ -39,13 +39,20 @@ type CreateQuestionRequest struct {
 }
 
 // UpdateQuestionRequest holds fields for updating a question.
+//
+// Type and Position are intentionally NOT in this struct:
+//   - Type: changing the question type mid-edit would invalidate Options; if
+//     the user wants a different type, they delete and recreate.
+//   - Position: reordering is done via the dedicated /reorder endpoint so
+//     partial updates from the editor don't accidentally reset position to 0.
+//
+// Text is allowed to be empty here (the editor saves drafts as the user types
+// and blurs). The live-session broadcast is what enforces non-empty text.
 type UpdateQuestionRequest struct {
-	Type             string                 `json:"type"               validate:"required,oneof=single_choice multiple_choice open_text image_choice word_cloud brainstorm"`
-	Text             string                 `json:"text"               validate:"required,max=500"`
+	Text             string                 `json:"text"               validate:"max=500"`
 	Options          []model.QuestionOption `json:"options"`
 	TimeLimitSeconds int                    `json:"time_limit_seconds" validate:"omitempty,min=5,max=300"`
 	Points           int                    `json:"points"             validate:"min=0"`
-	Position         int                    `json:"position"           validate:"min=0"`
 }
 
 // ReorderRequest holds a question ID and its desired position.
@@ -161,9 +168,6 @@ func (s *questionService) Update(ctx context.Context, userID, pollID, questionID
 	if err := s.verifyPollOwner(ctx, userID, pollID); err != nil {
 		return nil, err
 	}
-	if err := validateOptions(req.Type, req.Options); err != nil {
-		return nil, err
-	}
 
 	q, err := s.questionRepo.GetByID(ctx, questionID)
 	if err != nil {
@@ -173,12 +177,12 @@ func (s *questionService) Update(ctx context.Context, userID, pollID, questionID
 		return nil, errs.ErrNotFound
 	}
 
-	q.Type = req.Type
+	// Update mutable fields only. Type and Position are preserved — Type is
+	// set at create time, Position is managed by the /reorder endpoint.
 	q.Text = req.Text
 	q.Options = model.OptionList(req.Options)
 	q.TimeLimitSeconds = req.TimeLimitSeconds
 	q.Points = req.Points
-	q.Position = req.Position
 	q.UpdatedAt = time.Now().UTC()
 
 	if err := s.questionRepo.Update(ctx, q); err != nil {

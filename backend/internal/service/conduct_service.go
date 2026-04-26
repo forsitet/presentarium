@@ -228,6 +228,26 @@ func (s *conductService) handleShowQuestion(c *ws.Client, room *ws.Room, env ws.
 		return
 	}
 
+	// Reject broadcasting a draft (empty text or empty option text). Without
+	// this check, participants would see placeholder "Вопрос..." / "Вариант 1"
+	// strings from the frontend's fallback rendering.
+	if strings.TrimSpace(q.Text) == "" {
+		sendError(room, c, "вопрос не заполнен: пустой текст")
+		return
+	}
+	if choiceTypes[q.Type] {
+		if len(q.Options) < 2 {
+			sendError(room, c, "вопрос не заполнен: нужно минимум 2 варианта ответа")
+			return
+		}
+		for i, o := range q.Options {
+			if strings.TrimSpace(o.Text) == "" && strings.TrimSpace(o.ImageURL) == "" {
+				sendError(room, c, fmt.Sprintf("вопрос не заполнен: вариант %d пустой", i+1))
+				return
+			}
+		}
+	}
+
 	// Load poll to get the scoring rule.
 	poll, err := s.pollRepo.GetByID(ctx, session.PollID)
 	if err != nil {
