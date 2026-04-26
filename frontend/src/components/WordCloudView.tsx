@@ -15,21 +15,33 @@ interface WordCloudViewProps {
   fullScreen?: boolean
 }
 
+// Mentimeter-style cloud: a single indigo hue across all phrases (popularity
+// is communicated entirely by font size), a tight layout that fills the box,
+// and a strictly horizontal orientation. We pass a few near-identical shades
+// of indigo so adjacent same-size phrases can be told apart, but the overall
+// impression is monochrome.
+const WC_COLORS = ['#3b5bb8', '#4f46e5', '#4338ca', '#4c5bc6']
+
 const WC_OPTIONS = {
-  fontSizes: [14, 64] as [number, number],
+  fontSizes: [14, 72] as [number, number],
   rotations: 0,
+  rotationAngles: [0, 0] as [number, number],
   fontFamily: 'Inter, system-ui, sans-serif',
+  fontWeight: '600' as const,
   deterministic: true,
-  padding: 4,
-  colors: ['#818cf8', '#a78bfa', '#f472b6', '#fb923c', '#34d399', '#60a5fa', '#facc15'],
+  padding: 2,
+  scale: 'sqrt' as const, // softens the size jump between rare and popular phrases
+  spiral: 'archimedean' as const,
+  colors: WC_COLORS,
   enableTooltip: true,
   tooltipOptions: {},
+  transitionDuration: 600, // smooth re-layout when new answers arrive
 }
 
 const WC_OPTIONS_FULL = {
   ...WC_OPTIONS,
-  fontSizes: [18, 96] as [number, number],
-  padding: 6,
+  fontSizes: [20, 120] as [number, number],
+  padding: 3,
 }
 
 /* ---------- Error Boundary for react-wordcloud ---------- */
@@ -63,8 +75,8 @@ function WordChipsFallback({ words }: { words: { text: string; value: number }[]
       {words.map((w) => (
         <span
           key={w.text}
-          className="px-3 py-1 rounded-full text-sm font-medium bg-indigo-600/30 text-indigo-200 border border-indigo-500/40"
-          style={{ fontSize: `${Math.min(12 + w.value * 2, 24)}px` }}
+          className="px-3 py-1 rounded-full font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200"
+          style={{ fontSize: `${Math.min(12 + w.value * 2, 28)}px` }}
         >
           {w.text}
           <span className="ml-1 opacity-60 text-xs">{w.value}</span>
@@ -110,7 +122,11 @@ export function WordCloudView({
 
   if (words.length === 0) {
     return (
-      <div className={`flex items-center justify-center text-gray-500 text-sm ${fullScreen ? 'h-full' : 'h-48'}`}>
+      <div
+        className={`flex items-center justify-center rounded-xl bg-slate-50 border border-slate-200 text-slate-500 text-sm ${
+          fullScreen ? 'h-full' : 'h-48'
+        }`}
+      >
         Ждём ответов участников...
       </div>
     )
@@ -122,10 +138,12 @@ export function WordCloudView({
 
   return (
     <div className={`flex flex-col gap-4 ${fullScreen ? 'h-full' : ''}`}>
-      {/* Word cloud visualization */}
+      {/* Word cloud visualization — Mentimeter-style: light surface, single
+          indigo hue, all phrases horizontal so multi-word answers stay
+          readable end-to-end. */}
       <div
         ref={containerRef}
-        className={`${cloudHeight} w-full bg-gray-900 rounded-xl overflow-hidden`}
+        className={`${cloudHeight} w-full bg-slate-50 border border-slate-200 rounded-xl overflow-hidden`}
       >
         {visibleWords.length > 0 ? (
           <WordCloudErrorBoundary fallback={<WordChipsFallback words={visibleWords} />}>
@@ -136,7 +154,7 @@ export function WordCloudView({
             />
           </WordCloudErrorBoundary>
         ) : (
-          <div className="h-full flex items-center justify-center text-gray-500 text-sm">
+          <div className="h-full flex items-center justify-center text-slate-500 text-sm">
             Все слова скрыты
           </div>
         )}
