@@ -33,6 +33,7 @@ export async function createPoll(data: {
   description?: string
   scoring_rule: Poll['scoring_rule']
   question_order: Poll['question_order']
+  show_answer_distribution?: boolean
 }): Promise<Poll> {
   const res = await apiClient.post<Poll>('/polls', data)
   return res.data
@@ -82,6 +83,7 @@ export interface RoomInfo {
   session_id: string
   status: string
   participants: number
+  show_answer_distribution: boolean
 }
 
 export async function getRoomInfo(code: string): Promise<RoomInfo> {

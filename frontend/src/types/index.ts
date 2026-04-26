@@ -10,6 +10,7 @@ export interface Poll {
   description?: string
   scoring_rule: 'none' | 'correct_answer' | 'speed_bonus'
   question_order: 'sequential' | 'random'
+  show_answer_distribution: boolean
   created_at: string
   updated_at: string
 }

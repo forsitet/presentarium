@@ -34,11 +34,12 @@ type CreateRoomResponse struct {
 
 // RoomInfoResponse is returned when querying room info.
 type RoomInfoResponse struct {
-	RoomCode     string    `json:"room_code"`
-	PollID       uuid.UUID `json:"poll_id"`
-	SessionID    uuid.UUID `json:"session_id"`
-	Status       string    `json:"status"`
-	Participants int       `json:"participants"`
+	RoomCode               string    `json:"room_code"`
+	PollID                 uuid.UUID `json:"poll_id"`
+	SessionID              uuid.UUID `json:"session_id"`
+	Status                 string    `json:"status"`
+	Participants           int       `json:"participants"`
+	ShowAnswerDistribution bool      `json:"show_answer_distribution"`
 }
 
 type roomService struct {
@@ -73,14 +74,19 @@ func (s *roomService) CreateRoom(ctx context.Context, userID, pollID uuid.UUID) 
 		return nil, errs.ErrForbidden
 	}
 
-	// Check for existing active room for this poll
-	_, err = s.sessionRepo.GetActiveByPoll(ctx, pollID)
-	if err == nil {
-		// Active room exists
-		return nil, errs.ErrConflict
-	}
-	if err != errs.ErrNotFound {
-		return nil, err
+	// If an active (non-finished) room already exists for this poll, return it
+	// instead of erroring. This keeps "Launch" idempotent: clicking it twice (or
+	// after a refresh that loses local state) lands the organizer back in the
+	// existing room rather than blocking them with a 409.
+	if existing, getErr := s.sessionRepo.GetActiveByPoll(ctx, pollID); getErr == nil {
+		s.ensureHubRoom(existing)
+		return &CreateRoomResponse{
+			RoomCode:  existing.RoomCode,
+			JoinURL:   "/join/" + existing.RoomCode,
+			SessionID: existing.ID,
+		}, nil
+	} else if getErr != errs.ErrNotFound {
+		return nil, getErr
 	}
 
 	// Generate unique 6-digit code with retry on collision
@@ -137,12 +143,20 @@ func (s *roomService) GetRoom(ctx context.Context, code string) (*RoomInfoRespon
 		participants = room.ParticipantCount()
 	}
 
+	// Fetch poll for poll-level settings the host needs at session time
+	// (e.g. whether to render the live answer distribution chart).
+	showDist := false
+	if poll, perr := s.pollRepo.GetByID(ctx, session.PollID); perr == nil {
+		showDist = poll.ShowAnswerDistribution
+	}
+
 	return &RoomInfoResponse{
-		RoomCode:     session.RoomCode,
-		PollID:       session.PollID,
-		SessionID:    session.ID,
-		Status:       session.Status,
-		Participants: participants,
+		RoomCode:               session.RoomCode,
+		PollID:                 session.PollID,
+		SessionID:              session.ID,
+		Status:                 session.Status,
+		Participants:           participants,
+		ShowAnswerDistribution: showDist,
 	}, nil
 }
 
