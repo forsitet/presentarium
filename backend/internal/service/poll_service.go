@@ -24,18 +24,20 @@ type PollService interface {
 
 // CreatePollRequest holds fields for creating a poll.
 type CreatePollRequest struct {
-	Title         string `json:"title"          validate:"required,max=200"`
-	Description   string `json:"description"    validate:"max=1000"`
-	ScoringRule   string `json:"scoring_rule"   validate:"required,oneof=none correct_answer speed_bonus"`
-	QuestionOrder string `json:"question_order" validate:"required,oneof=sequential random"`
+	Title                  string `json:"title"                    validate:"required,max=200"`
+	Description            string `json:"description"              validate:"max=1000"`
+	ScoringRule            string `json:"scoring_rule"             validate:"required,oneof=none correct_answer speed_bonus"`
+	QuestionOrder          string `json:"question_order"           validate:"required,oneof=sequential random"`
+	ShowAnswerDistribution bool   `json:"show_answer_distribution"`
 }
 
 // UpdatePollRequest holds fields for updating a poll.
 type UpdatePollRequest struct {
-	Title         string `json:"title"          validate:"required,max=200"`
-	Description   string `json:"description"    validate:"max=1000"`
-	ScoringRule   string `json:"scoring_rule"   validate:"required,oneof=none correct_answer speed_bonus"`
-	QuestionOrder string `json:"question_order" validate:"required,oneof=sequential random"`
+	Title                  string `json:"title"                    validate:"required,max=200"`
+	Description            string `json:"description"              validate:"max=1000"`
+	ScoringRule            string `json:"scoring_rule"             validate:"required,oneof=none correct_answer speed_bonus"`
+	QuestionOrder          string `json:"question_order"           validate:"required,oneof=sequential random"`
+	ShowAnswerDistribution bool   `json:"show_answer_distribution"`
 }
 
 type pollService struct {
@@ -50,14 +52,15 @@ func NewPollService(pollRepo repository.PollRepository) PollService {
 func (s *pollService) Create(ctx context.Context, userID uuid.UUID, req CreatePollRequest) (*model.Poll, error) {
 	now := time.Now().UTC()
 	poll := &model.Poll{
-		ID:            uuid.New(),
-		UserID:        userID,
-		Title:         req.Title,
-		Description:   req.Description,
-		ScoringRule:   req.ScoringRule,
-		QuestionOrder: req.QuestionOrder,
-		CreatedAt:     now,
-		UpdatedAt:     now,
+		ID:                     uuid.New(),
+		UserID:                 userID,
+		Title:                  req.Title,
+		Description:            req.Description,
+		ScoringRule:            req.ScoringRule,
+		QuestionOrder:          req.QuestionOrder,
+		ShowAnswerDistribution: req.ShowAnswerDistribution,
+		CreatedAt:              now,
+		UpdatedAt:              now,
 	}
 	if err := s.pollRepo.Create(ctx, poll); err != nil {
 		return nil, err
@@ -93,6 +96,7 @@ func (s *pollService) Update(ctx context.Context, userID, pollID uuid.UUID, req 
 	poll.Description = req.Description
 	poll.ScoringRule = req.ScoringRule
 	poll.QuestionOrder = req.QuestionOrder
+	poll.ShowAnswerDistribution = req.ShowAnswerDistribution
 	poll.UpdatedAt = time.Now().UTC()
 
 	if err := s.pollRepo.Update(ctx, poll); err != nil {
@@ -123,14 +127,15 @@ func (s *pollService) Copy(ctx context.Context, userID, pollID uuid.UUID) (*mode
 
 	now := time.Now().UTC()
 	copied := &model.Poll{
-		ID:            uuid.New(),
-		UserID:        userID,
-		Title:         fmt.Sprintf("%s (Копия)", original.Title),
-		Description:   original.Description,
-		ScoringRule:   original.ScoringRule,
-		QuestionOrder: original.QuestionOrder,
-		CreatedAt:     now,
-		UpdatedAt:     now,
+		ID:                     uuid.New(),
+		UserID:                 userID,
+		Title:                  fmt.Sprintf("%s (Копия)", original.Title),
+		Description:            original.Description,
+		ScoringRule:            original.ScoringRule,
+		QuestionOrder:          original.QuestionOrder,
+		ShowAnswerDistribution: original.ShowAnswerDistribution,
+		CreatedAt:              now,
+		UpdatedAt:              now,
 	}
 	if err := s.pollRepo.Create(ctx, copied); err != nil {
 		return nil, err

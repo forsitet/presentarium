@@ -31,6 +31,11 @@ type ConductService interface {
 	// EndSession ends the session, broadcasts session_end with the final leaderboard,
 	// and updates the session status to "finished" in the database.
 	EndSession(ctx context.Context, userID uuid.UUID, roomCode string) error
+	// ReplayStateForClient sends the current room state (active question, timer,
+	// distribution, leaderboard, …) to a freshly-(re)connected client so they
+	// can resume the session after a page refresh instead of being stuck on the
+	// waiting screen.
+	ReplayStateForClient(c *ws.Client, room *ws.Room)
 }
 
 type conductService struct {
@@ -1117,6 +1122,219 @@ func (s *conductService) handleClosePresentation(c *ws.Client, room *ws.Room) {
 // sendError sends an error envelope to the given client via the room.
 func sendError(room *ws.Room, c *ws.Client, message string) {
 	if msg, err := ws.NewEnvelope(ws.MsgTypeError, ws.ErrorData{Message: message}); err == nil {
+		room.SendToClient(c, msg)
+	}
+}
+
+// ReplayStateForClient mirrors live session state to a (re)connecting client.
+// Without this, a page refresh during an active session lands the user on the
+// "waiting" screen because the WS connection alone does not carry state.
+//
+// Per state, the messages sent are:
+//   - active           : room_started (organizer only).
+//   - showing_question : room_started, question_start, timer_tick (with computed
+//                        remaining), and answer_accepted (participant only,
+//                        if they already answered).
+//   - showing_results  : same as above, plus question_end, results, leaderboard.
+//   - finished         : session_end with the final ranking.
+//
+// The session continues uninterrupted on the server — this is purely a client
+// resync helper.
+func (s *conductService) ReplayStateForClient(c *ws.Client, room *ws.Room) {
+	state := room.State()
+	if state == ws.StateWaiting {
+		return
+	}
+
+	ctx := context.Background()
+
+	// Organizer needs the question_order so the "next question" button steps
+	// through the right sequence after a refresh.
+	if c.Role() == ws.RoleOrganizer {
+		if order := room.GetQuestionOrder(); len(order) > 0 {
+			if msg, err := ws.NewEnvelope(ws.MsgTypeRoomStarted, ws.RoomStartedData{QuestionOrder: order}); err == nil {
+				room.SendToClient(c, msg)
+			}
+		}
+	}
+
+	if state == ws.StateFinished {
+		s.replaySessionEnd(ctx, c, room)
+		return
+	}
+
+	// Pick the question to replay: current one if a question is showing,
+	// last finished one if we're in the showing_results screen.
+	var current *ws.ActiveQuestion
+	switch state {
+	case ws.StateShowingQuestion:
+		current = room.CurrentQuestion()
+	case ws.StateShowingResults:
+		current = room.LastQuestion()
+	}
+	if current == nil {
+		// active state with no question shown yet — nothing more to replay.
+		return
+	}
+
+	session, err := s.sessionRepo.GetByCode(ctx, room.Code())
+	if err != nil {
+		return
+	}
+	q, err := s.questionRepo.GetByID(ctx, current.ID)
+	if err != nil {
+		return
+	}
+	allQs, _ := s.questionRepo.ListByPoll(ctx, session.PollID)
+	total := len(allQs)
+
+	optionsForParticipants, _ := buildParticipantOptions(q.Options)
+
+	startData := ws.QuestionStartData{
+		QuestionID:   q.ID,
+		Type:         q.Type,
+		Text:         q.Text,
+		Options:      optionsForParticipants,
+		TimeLimitSec: q.TimeLimitSeconds,
+		Points:       q.Points,
+		Position:     q.Position,
+		Total:        total,
+	}
+	if msg, err := ws.NewEnvelope(ws.MsgTypeQuestionStart, startData); err == nil {
+		room.SendToClient(c, msg)
+	}
+
+	if state == ws.StateShowingQuestion {
+		elapsed := time.Now().Unix() - current.StartedAt
+		remaining := current.TimeLimitSec - int(elapsed)
+		if remaining < 0 {
+			remaining = 0
+		}
+		if msg, err := ws.NewEnvelope(ws.MsgTypeTimerTick, ws.TimerTickData{Remaining: remaining}); err == nil {
+			room.SendToClient(c, msg)
+		}
+
+		// Word_cloud allows multiple submissions and uses no answerSubmitted state
+		// on the client — skip the replay there.
+		if c.Role() == ws.RoleParticipant && q.Type != "word_cloud" {
+			s.replayParticipantAnswer(ctx, c, room, q.ID)
+		}
+		return
+	}
+
+	// state == ws.StateShowingResults
+	optsRevealed, _ := json.Marshal(q.Options)
+	if msg, err := ws.NewEnvelope(ws.MsgTypeQuestionEnd, ws.QuestionEndData{
+		QuestionID: q.ID,
+		Options:    optsRevealed,
+	}); err == nil {
+		room.SendToClient(c, msg)
+	}
+
+	answers, _ := s.answerRepo.ListByQuestion(ctx, q.ID, session.ID)
+	answerCounts := make(map[string]int)
+	for _, a := range answers {
+		key := fmt.Sprintf("%v", a.Answer)
+		answerCounts[key]++
+	}
+	if msg, err := ws.NewEnvelope(ws.MsgTypeResults, ws.ResultsData{
+		QuestionID:   q.ID,
+		AnswerCounts: answerCounts,
+	}); err == nil {
+		room.SendToClient(c, msg)
+	}
+
+	if c.Role() == ws.RoleParticipant && q.Type != "word_cloud" {
+		s.replayParticipantAnswer(ctx, c, room, q.ID)
+	}
+
+	// Send leaderboard last — this is what flips the host UI into
+	// showing_results, after question_end + results have populated state.
+	s.sendLeaderboardSnapshot(ctx, c, room, session.ID)
+}
+
+// replayParticipantAnswer sends an answer_accepted envelope to the participant
+// (with their stored score / correctness) so the UI shows the "answer accepted"
+// state instead of the input form. Silently no-ops if there is no recorded
+// answer for this participant + question.
+func (s *conductService) replayParticipantAnswer(ctx context.Context, c *ws.Client, room *ws.Room, questionID uuid.UUID) {
+	pid := c.ParticipantID()
+	if pid == nil {
+		return
+	}
+	existing, err := s.answerRepo.GetByParticipantAndQuestion(ctx, *pid, questionID)
+	if err != nil {
+		return
+	}
+	if msg, err := ws.NewEnvelope(ws.MsgTypeAnswerAccepted, ws.AnswerAcceptedData{
+		QuestionID: existing.QuestionID,
+		Score:      existing.Score,
+		IsCorrect:  existing.IsCorrect,
+	}); err == nil {
+		room.SendToClient(c, msg)
+	}
+}
+
+// sendLeaderboardSnapshot computes the top-5 leaderboard for the given session
+// and sends it to a single client. The participant variant fills in MyRank /
+// MyScore so the per-participant rank widget shows the right position.
+func (s *conductService) sendLeaderboardSnapshot(ctx context.Context, c *ws.Client, room *ws.Room, sessionID uuid.UUID) {
+	lbRows, _ := s.answerRepo.GetLeaderboard(ctx, sessionID)
+	const top = 5
+	top5 := make([]ws.LeaderboardEntry, 0, top)
+	rankMap := make(map[uuid.UUID]int, len(lbRows))
+	scoreMap := make(map[uuid.UUID]int, len(lbRows))
+	for i, row := range lbRows {
+		rank := i + 1
+		rankMap[row.ParticipantID] = rank
+		scoreMap[row.ParticipantID] = row.TotalScore
+		if i < top {
+			top5 = append(top5, ws.LeaderboardEntry{
+				Rank:  rank,
+				ID:    row.ParticipantID,
+				Name:  row.Name,
+				Score: row.TotalScore,
+			})
+		}
+	}
+	data := ws.LeaderboardData{Rankings: top5}
+	if c.Role() == ws.RoleParticipant {
+		if pid := c.ParticipantID(); pid != nil {
+			data.MyRank = rankMap[*pid]
+			data.MyScore = scoreMap[*pid]
+		}
+	}
+	if msg, err := ws.NewEnvelope(ws.MsgTypeLeaderboard, data); err == nil {
+		room.SendToClient(c, msg)
+	}
+}
+
+// replaySessionEnd sends the final session_end envelope (full leaderboard) to a
+// client connecting to a finished session.
+func (s *conductService) replaySessionEnd(ctx context.Context, c *ws.Client, room *ws.Room) {
+	lbRows, _ := s.answerRepo.GetLeaderboard(ctx, room.SessionID())
+	rankings := make([]ws.LeaderboardEntry, 0, len(lbRows))
+	rankMap := make(map[uuid.UUID]int, len(lbRows))
+	scoreMap := make(map[uuid.UUID]int, len(lbRows))
+	for i, row := range lbRows {
+		rank := i + 1
+		rankMap[row.ParticipantID] = rank
+		scoreMap[row.ParticipantID] = row.TotalScore
+		rankings = append(rankings, ws.LeaderboardEntry{
+			Rank:  rank,
+			ID:    row.ParticipantID,
+			Name:  row.Name,
+			Score: row.TotalScore,
+		})
+	}
+	data := ws.SessionEndData{Rankings: rankings}
+	if c.Role() == ws.RoleParticipant {
+		if pid := c.ParticipantID(); pid != nil {
+			data.MyRank = rankMap[*pid]
+			data.MyScore = scoreMap[*pid]
+		}
+	}
+	if msg, err := ws.NewEnvelope(ws.MsgTypeSessionEnd, data); err == nil {
 		room.SendToClient(c, msg)
 	}
 }

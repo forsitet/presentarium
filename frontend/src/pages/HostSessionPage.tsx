@@ -83,6 +83,7 @@ export function HostSessionPage() {
   const [copied, setCopied] = useState(false)
   const [starting, setStarting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [showAnswerDistribution, setShowAnswerDistribution] = useState(false)
 
   // Quiz state
   const [questions, setQuestions] = useState<Question[]>([])
@@ -122,6 +123,7 @@ export function HostSessionPage() {
     getRoomInfo(code)
       .then((info) => {
         if (!pollId && info.poll_id) setPollId(info.poll_id)
+        setShowAnswerDistribution(!!info.show_answer_distribution)
         // Sync status so we don't show "waiting" when the room is already active
         const validStatuses = ['waiting', 'active', 'showing_question', 'showing_results', 'finished'] as const
         type RS = typeof validStatuses[number]
@@ -714,11 +716,17 @@ export function HostSessionPage() {
                   </span>
                 </div>
                 {hasOptions ? (
-                  <AnswerBarChart
-                    options={activeQ.options!}
-                    distribution={distribution}
-                    showCorrect={false}
-                  />
+                  showAnswerDistribution ? (
+                    <AnswerBarChart
+                      options={activeQ.options!}
+                      distribution={distribution}
+                      showCorrect={false}
+                    />
+                  ) : (
+                    <p className="text-gray-500 text-sm text-center py-12">
+                      Распределение скрыто. Показывается после завершения вопроса.
+                    </p>
+                  )
                 ) : activeQ.type === 'brainstorm' ? (
                   <BrainstormBoard
                     questionId={activeQ.question_id}

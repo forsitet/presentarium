@@ -56,6 +56,7 @@ export function PollEditorPage() {
   const [description, setDescription] = useState('')
   const [scoringRule, setScoringRule] = useState<ScoringRule>('none')
   const [questionOrder, setQuestionOrder] = useState<QuestionOrder>('sequential')
+  const [showAnswerDistribution, setShowAnswerDistribution] = useState(false)
 
   // Questions
   const [questions, setQuestions] = useState<Question[]>([])
@@ -108,6 +109,7 @@ export function PollEditorPage() {
         setDescription(poll.description ?? '')
         setScoringRule(poll.scoring_rule)
         setQuestionOrder(poll.question_order)
+        setShowAnswerDistribution(poll.show_answer_distribution ?? false)
         const sorted = qs.sort((a, b) => a.position - b.position)
         setQuestions(sorted)
         if (sorted.length > 0) setSelectedQuestionId(sorted[0].id)
@@ -125,7 +127,7 @@ export function PollEditorPage() {
   // so that concurrent callers (debounced save + add question) don't create
   // duplicate polls.
   const ensurePoll = useCallback(
-    async (t: string, desc: string, scoring: ScoringRule, order: QuestionOrder): Promise<string> => {
+    async (t: string, desc: string, scoring: ScoringRule, order: QuestionOrder, showDist: boolean): Promise<string> => {
       // Already created — return immediately
       if (pollIdRef.current && pollCreatedRef.current) {
         return pollIdRef.current
@@ -144,6 +146,7 @@ export function PollEditorPage() {
         description: desc.trim() || undefined,
         scoring_rule: scoring,
         question_order: order,
+        show_answer_distribution: showDist,
       }).then((poll) => {
         pollIdRef.current = poll.id
         setPollId(poll.id)
@@ -163,12 +166,12 @@ export function PollEditorPage() {
 
   // Auto-save poll settings with debounce
   const savePollSettings = useCallback(
-    async (newTitle: string, newDesc: string, newScoring: ScoringRule, newOrder: QuestionOrder) => {
+    async (newTitle: string, newDesc: string, newScoring: ScoringRule, newOrder: QuestionOrder, newShowDist: boolean) => {
       if (!newTitle.trim()) return
 
       try {
         const alreadyExisted = pollCreatedRef.current || !isNew
-        const currentId = await ensurePoll(newTitle, newDesc, newScoring, newOrder)
+        const currentId = await ensurePoll(newTitle, newDesc, newScoring, newOrder, newShowDist)
         // Only update if the poll already existed before ensurePoll
         // (ensurePoll already created it with these settings otherwise)
         if (alreadyExisted) {
@@ -177,6 +180,7 @@ export function PollEditorPage() {
             description: newDesc.trim() || undefined,
             scoring_rule: newScoring,
             question_order: newOrder,
+            show_answer_distribution: newShowDist,
           })
         }
         flashSaveStatus('saved')
@@ -188,10 +192,10 @@ export function PollEditorPage() {
   )
 
   const debouncedSave = useCallback(
-    (newTitle: string, newDesc: string, newScoring: ScoringRule, newOrder: QuestionOrder) => {
+    (newTitle: string, newDesc: string, newScoring: ScoringRule, newOrder: QuestionOrder, newShowDist: boolean) => {
       if (debounceRef.current) clearTimeout(debounceRef.current)
       debounceRef.current = setTimeout(() => {
-        savePollSettings(newTitle, newDesc, newScoring, newOrder)
+        savePollSettings(newTitle, newDesc, newScoring, newOrder, newShowDist)
       }, 500)
     },
     [savePollSettings],
@@ -199,22 +203,27 @@ export function PollEditorPage() {
 
   const handleTitleChange = (val: string) => {
     setTitle(val)
-    debouncedSave(val, description, scoringRule, questionOrder)
+    debouncedSave(val, description, scoringRule, questionOrder, showAnswerDistribution)
   }
 
   const handleDescriptionChange = (val: string) => {
     setDescription(val)
-    debouncedSave(title, val, scoringRule, questionOrder)
+    debouncedSave(title, val, scoringRule, questionOrder, showAnswerDistribution)
   }
 
   const handleScoringChange = (val: ScoringRule) => {
     setScoringRule(val)
-    debouncedSave(title, description, val, questionOrder)
+    debouncedSave(title, description, val, questionOrder, showAnswerDistribution)
   }
 
   const handleOrderChange = (val: QuestionOrder) => {
     setQuestionOrder(val)
-    debouncedSave(title, description, scoringRule, val)
+    debouncedSave(title, description, scoringRule, val, showAnswerDistribution)
+  }
+
+  const handleShowDistributionChange = (val: boolean) => {
+    setShowAnswerDistribution(val)
+    debouncedSave(title, description, scoringRule, questionOrder, val)
   }
 
   // Add question
@@ -227,7 +236,7 @@ export function PollEditorPage() {
       if (!title.trim()) {
         setTitle('Новый опрос')
       }
-      currentPollId = await ensurePoll(title || 'Новый опрос', description, scoringRule, questionOrder)
+      currentPollId = await ensurePoll(title || 'Новый опрос', description, scoringRule, questionOrder, showAnswerDistribution)
     } catch {
       flashSaveStatus('error')
       return
@@ -388,7 +397,7 @@ export function PollEditorPage() {
             onClick={() => {
               if (debounceRef.current) {
                 clearTimeout(debounceRef.current)
-                savePollSettings(title, description, scoringRule, questionOrder)
+                savePollSettings(title, description, scoringRule, questionOrder, showAnswerDistribution)
               }
               navigate('/dashboard')
             }}
@@ -467,6 +476,24 @@ export function PollEditorPage() {
                 <option value="sequential">Последовательный</option>
                 <option value="random">Случайный</option>
               </select>
+            </div>
+            <div className="md:col-span-2">
+              <label className="flex items-start gap-3 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={showAnswerDistribution}
+                  onChange={(e) => handleShowDistributionChange(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                />
+                <span>
+                  <span className="block text-sm font-medium text-gray-700">
+                    Показывать распределение ответов в реальном времени
+                  </span>
+                  <span className="block text-xs text-gray-500 mt-0.5">
+                    График распределения будет виден на экране ведущего во время опроса. По умолчанию скрыт.
+                  </span>
+                </span>
+              </label>
             </div>
           </div>
         </div>
