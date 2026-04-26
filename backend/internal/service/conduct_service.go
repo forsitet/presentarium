@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 	"time"
 
@@ -386,11 +387,11 @@ func (s *conductService) finishQuestion(room *ws.Room, questionID, sessionID uui
 
 	// Compute answer distribution for results.
 	answers, _ := s.answerRepo.ListByQuestion(ctx, questionID, sessionID)
-	answerCounts := make(map[string]int)
-	for _, a := range answers {
-		key := fmt.Sprintf("%v", a.Answer)
-		answerCounts[key]++
+	qType := ""
+	if q != nil {
+		qType = q.Type
 	}
+	answerCounts := computeAnswerDistribution(answers, qType)
 
 	resultsData := ws.ResultsData{
 		QuestionID:   questionID,
@@ -1232,11 +1233,7 @@ func (s *conductService) ReplayStateForClient(c *ws.Client, room *ws.Room) {
 	}
 
 	answers, _ := s.answerRepo.ListByQuestion(ctx, q.ID, session.ID)
-	answerCounts := make(map[string]int)
-	for _, a := range answers {
-		key := fmt.Sprintf("%v", a.Answer)
-		answerCounts[key]++
-	}
+	answerCounts := computeAnswerDistribution(answers, q.Type)
 	if msg, err := ws.NewEnvelope(ws.MsgTypeResults, ws.ResultsData{
 		QuestionID:   q.ID,
 		AnswerCounts: answerCounts,
@@ -1336,5 +1333,78 @@ func (s *conductService) replaySessionEnd(ctx context.Context, c *ws.Client, roo
 	}
 	if msg, err := ws.NewEnvelope(ws.MsgTypeSessionEnd, data); err == nil {
 		room.SendToClient(c, msg)
+	}
+}
+
+// computeAnswerDistribution turns a list of stored answers into a map keyed
+// by what the frontend bar chart expects:
+//
+//   - single_choice / image_choice : "0"|"1"|... — index of the chosen option.
+//   - multiple_choice              : same, with one count per selected index
+//                                    (so an answer of [0,2] adds 1 to both "0"
+//                                    and "2").
+//   - everything else (open_text,
+//     word_cloud)                  : the literal text the participant typed.
+//
+// Without proper decoding the previous fmt.Sprintf("%v", a.Answer) produced
+// keys like "[48]" because sqlx hands back JSONB columns as []byte and Go's
+// default formatter prints byte slices as decimal arrays — so the chart
+// looked up "0"/"1" and got nothing.
+func computeAnswerDistribution(answers []model.Answer, questionType string) map[string]int {
+	counts := make(map[string]int)
+	for _, a := range answers {
+		raw := answerRawBytes(a.Answer)
+		if len(raw) == 0 {
+			continue
+		}
+		switch questionType {
+		case "single_choice", "image_choice":
+			var idx int
+			if err := json.Unmarshal(raw, &idx); err != nil {
+				continue
+			}
+			counts[strconv.Itoa(idx)]++
+		case "multiple_choice":
+			var indices []int
+			if err := json.Unmarshal(raw, &indices); err != nil {
+				continue
+			}
+			for _, idx := range indices {
+				counts[strconv.Itoa(idx)]++
+			}
+		default:
+			// open_text / word_cloud / brainstorm — answer is a JSON string.
+			var text string
+			if err := json.Unmarshal(raw, &text); err == nil {
+				counts[text]++
+			} else {
+				// Fall back to the raw JSON if it isn't a string for some
+				// reason — better than losing the count entirely.
+				counts[string(raw)]++
+			}
+		}
+	}
+	return counts
+}
+
+// answerRawBytes coerces the model.Answer.Answer interface{} (which sqlx may
+// populate as []byte, string, or json.RawMessage depending on the driver) into
+// raw JSON bytes ready for json.Unmarshal.
+func answerRawBytes(v interface{}) []byte {
+	switch x := v.(type) {
+	case nil:
+		return nil
+	case []byte:
+		return x
+	case string:
+		return []byte(x)
+	case json.RawMessage:
+		return []byte(x)
+	default:
+		b, err := json.Marshal(v)
+		if err != nil {
+			return nil
+		}
+		return b
 	}
 }
