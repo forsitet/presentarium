@@ -35,6 +35,15 @@ type ActiveQuestion struct {
 	Points       int    // question base points
 }
 
+// wordCloudEntry is one bucket in the per-question word cloud frequency map.
+// Display preserves the original casing/spacing of the first submitter so the
+// cloud looks natural ("Go" instead of "go") even though aggregation is
+// case-insensitive via the map key.
+type wordCloudEntry struct {
+	Display string
+	Count   int
+}
+
 // ActivePresentation holds runtime state for the currently displayed presentation.
 // Mirrors the on-disk session row so late-joiners / reconnects can restore the
 // current slide without hitting the DB. The Slides slice is a denormalised copy
@@ -62,9 +71,13 @@ type Room struct {
 	// currentQuestion has been cleared by TryFinishQuestion.
 	lastQuestion *ActiveQuestion
 	stopTimer    chan struct{}
-	answerCount        int            // number of answers received for the current question
-	totalResponseMs    int            // sum of response times in ms (for average calculation)
-	wordCloudFreq      map[string]int // per-question word frequency for word_cloud questions
+	answerCount        int                        // number of answers received for the current question
+	totalResponseMs    int                        // sum of response times in ms (for average calculation)
+	// wordCloudPhrases keys by the normalized phrase ("go", "искусственный
+	// интеллект", …) and stores both the original casing/spacing the
+	// participant first used (for display) and the running count. Multi-word
+	// answers are kept as a single phrase — they are NOT split on spaces.
+	wordCloudPhrases map[string]wordCloudEntry
 
 	// questionOrder holds the session-specific order of question IDs.
 	// Set once when the session starts (shuffled for "random" polls).
@@ -297,7 +310,7 @@ func (r *Room) ResetAnswerCount() {
 	defer r.mu.Unlock()
 	r.answerCount = 0
 	r.totalResponseMs = 0
-	r.wordCloudFreq = nil
+	r.wordCloudPhrases = nil
 }
 
 // InitBrainstorm initialises in-memory state for a new brainstorm question.
@@ -359,34 +372,67 @@ func (r *Room) BrainstormVoteCount(participantID uuid.UUID) int {
 	return r.brainstormVoteCounts[participantID]
 }
 
-// AddWordCloudWords increments the frequency count for each word in the word cloud.
-func (r *Room) AddWordCloudWords(words []string) {
+// AddWordCloudPhrase records one full phrase submission in the cloud.
+//
+//	key     — normalized form used for case/whitespace-insensitive aggregation
+//	          (e.g. normalize.Text("  ИИ  ") → "ии"). Caller is responsible for
+//	          keying so the ws package stays free of normalization deps.
+//	display — text shown in the cloud. The first submitter's casing/spacing
+//	          is preserved across subsequent submissions of the same phrase.
+//
+// Returns the new count for this phrase. Empty key is a no-op.
+func (r *Room) AddWordCloudPhrase(key, display string) int {
+	if key == "" {
+		return 0
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.wordCloudFreq == nil {
-		r.wordCloudFreq = make(map[string]int)
+	if r.wordCloudPhrases == nil {
+		r.wordCloudPhrases = make(map[string]wordCloudEntry)
 	}
-	for _, w := range words {
-		if w != "" {
-			r.wordCloudFreq[w]++
-		}
+	entry := r.wordCloudPhrases[key]
+	if entry.Display == "" {
+		entry.Display = display
 	}
+	entry.Count++
+	r.wordCloudPhrases[key] = entry
+	return entry.Count
 }
 
-// WordCloudTopWords returns the top N words by frequency as a slice of (text, count) pairs.
-// Words are sorted by frequency descending. If n <= 0, all words are returned.
+// SetWordCloudPhrases replaces the in-memory frequency map. Used when
+// rebuilding state from the database after a server restart so reconnecting
+// clients see the cloud they had before the restart.
+func (r *Room) SetWordCloudPhrases(entries map[string]struct {
+	Display string
+	Count   int
+}) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if len(entries) == 0 {
+		r.wordCloudPhrases = nil
+		return
+	}
+	m := make(map[string]wordCloudEntry, len(entries))
+	for k, v := range entries {
+		m[k] = wordCloudEntry{Display: v.Display, Count: v.Count}
+	}
+	r.wordCloudPhrases = m
+}
+
+// WordCloudTopWords returns the top N phrases by count as (display text, count)
+// pairs sorted by count desc then display asc for stability. n <= 0 → all.
 func (r *Room) WordCloudTopWords(n int) []WordcloudWord {
 	r.mu.RLock()
-	freq := r.wordCloudFreq
+	src := r.wordCloudPhrases
 	r.mu.RUnlock()
 
-	if len(freq) == 0 {
+	if len(src) == 0 {
 		return []WordcloudWord{}
 	}
 
-	words := make([]WordcloudWord, 0, len(freq))
-	for text, count := range freq {
-		words = append(words, WordcloudWord{Text: text, Count: count})
+	words := make([]WordcloudWord, 0, len(src))
+	for _, entry := range src {
+		words = append(words, WordcloudWord{Text: entry.Display, Count: entry.Count})
 	}
 
 	// Sort by count descending, then alphabetically for stability.

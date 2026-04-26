@@ -559,6 +559,16 @@ func (s *conductService) handleSubmitAnswer(c *ws.Client, room *ws.Room, env ws.
 }
 
 // handleSubmitText processes a participant's text answer (open_text, word_cloud).
+//
+// Open-text questions accept exactly one answer per participant.
+//
+// Word-cloud questions accept many — each submission is one whole phrase
+// ("искусственный интеллект" stays as one entry, NOT split into "искусственный"
+// + "интеллект"). The answers table has a UNIQUE (participant_id, question_id)
+// constraint, so all phrases from one participant are stored as a JSON array
+// in a single row, growing on each submit. The host-facing word cloud is
+// aggregated case-insensitively in memory (the first submitter's casing wins
+// for display).
 func (s *conductService) handleSubmitText(c *ws.Client, room *ws.Room, env ws.Envelope) {
 	if c.Role() != ws.RoleParticipant {
 		sendError(room, c, "only participants can submit answers")
@@ -587,44 +597,39 @@ func (s *conductService) handleSubmitText(c *ws.Client, room *ws.Room, env ws.En
 	}
 
 	ctx := context.Background()
-
-	// Prevent duplicate answers (except word_cloud which allows multiple submissions).
-	if current.Type != "word_cloud" {
-		_, err := s.answerRepo.GetByParticipantAndQuestion(ctx, *participantID, data.QuestionID)
-		if err == nil {
-			sendError(room, c, "already answered this question")
-			return
-		}
-		if !errors.Is(err, errs.ErrNotFound) {
-			sendError(room, c, "internal error")
-			return
-		}
-	}
-
 	responseTimeMs := int(time.Since(time.Unix(current.StartedAt, 0)).Milliseconds())
 
-	// For word_cloud and open_text questions: apply badwords filter before storing.
-	storedText := data.Text
-	if current.Type == "word_cloud" || current.Type == "open_text" {
-		filtered, _ := badwords.Filter(data.Text)
-		storedText = filtered
+	// Filter badwords once for both branches.
+	filtered, _ := badwords.Filter(data.Text)
+	storedText := strings.TrimSpace(filtered)
+
+	if current.Type == "word_cloud" {
+		s.handleWordCloudSubmit(ctx, c, room, *participantID, data.QuestionID, storedText, responseTimeMs)
+		return
+	}
+
+	// open_text — one row per participant, reject second submission.
+	if _, err := s.answerRepo.GetByParticipantAndQuestion(ctx, *participantID, data.QuestionID); err == nil {
+		sendError(room, c, "already answered this question")
+		return
+	} else if !errors.Is(err, errs.ErrNotFound) {
+		sendError(room, c, "internal error")
+		return
 	}
 
 	textJSON, _ := json.Marshal(storedText)
-
 	answer := &model.Answer{
 		ID:             uuid.New(),
 		ParticipantID:  *participantID,
 		QuestionID:     data.QuestionID,
 		SessionID:      room.SessionID(),
 		Answer:         json.RawMessage(textJSON),
-		IsCorrect:      nil, // text answers have no correct/incorrect concept
+		IsCorrect:      nil,
 		Score:          0,
 		ResponseTimeMs: responseTimeMs,
 		IsHidden:       false,
 		AnsweredAt:     time.Now(),
 	}
-
 	if err := s.answerRepo.Create(ctx, answer); err != nil {
 		sendError(room, c, "failed to save answer")
 		return
@@ -639,7 +644,6 @@ func (s *conductService) handleSubmitText(c *ws.Client, room *ws.Room, env ws.En
 	}); err2 == nil {
 		room.SendToClient(c, msg)
 	}
-
 	if msg, err2 := ws.NewEnvelope(ws.MsgTypeAnswerCount, ws.AnswerCountData{
 		Answered:      count,
 		Total:         total,
@@ -649,19 +653,135 @@ func (s *conductService) handleSubmitText(c *ws.Client, room *ws.Room, env ws.En
 		room.SendToOrganizer(msg)
 	}
 
-	// For word_cloud questions: update in-memory frequency and broadcast to organizer.
-	if current.Type == "word_cloud" {
-		normalized := normalize.Text(storedText)
-		words := strings.Fields(normalized)
-		room.AddWordCloudWords(words)
+	slog.Debug("text answer submitted", "participant_id", *participantID, "question_id", data.QuestionID, "answered", count, "total", total)
+}
 
-		topWords := room.WordCloudTopWords(100)
-		if msg, err2 := ws.NewEnvelope(ws.MsgTypeWordcloudUpdate, ws.WordcloudUpdateData{Words: topWords}); err2 == nil {
-			room.SendToOrganizer(msg)
-		}
+// handleWordCloudSubmit appends one phrase to the participant's existing
+// answer row (or creates the row if this is their first submission), updates
+// the in-memory cloud, and broadcasts the new wordcloud_update snapshot.
+//
+// The phrase is treated as ONE unit — multi-word answers like "искусственный
+// интеллект" are kept whole. Aggregation is case-insensitive via normalize.Text;
+// display preserves the first submitter's original casing.
+func (s *conductService) handleWordCloudSubmit(
+	ctx context.Context,
+	c *ws.Client,
+	room *ws.Room,
+	participantID, questionID uuid.UUID,
+	phrase string,
+	responseTimeMs int,
+) {
+	display := strings.TrimSpace(phrase)
+	if display == "" {
+		sendError(room, c, "пустой ответ")
+		return
+	}
+	key := normalize.Text(display)
+	if key == "" {
+		// Phrase consisted entirely of punctuation/whitespace.
+		sendError(room, c, "пустой ответ")
+		return
 	}
 
-	slog.Debug("text answer submitted", "participant_id", *participantID, "question_id", data.QuestionID, "answered", count, "total", total)
+	const maxPhrases = 50 // belt-and-braces cap on per-participant submissions
+
+	// Read-modify-write of the participant's accumulating phrase array.
+	existing, err := s.answerRepo.GetByParticipantAndQuestion(ctx, participantID, questionID)
+	switch {
+	case errors.Is(err, errs.ErrNotFound):
+		// First submission for this participant — create the row.
+		payload, _ := json.Marshal([]string{display})
+		row := &model.Answer{
+			ID:             uuid.New(),
+			ParticipantID:  participantID,
+			QuestionID:     questionID,
+			SessionID:      room.SessionID(),
+			Answer:         json.RawMessage(payload),
+			IsCorrect:      nil,
+			Score:          0,
+			ResponseTimeMs: responseTimeMs,
+			IsHidden:       false,
+			AnsweredAt:     time.Now(),
+		}
+		if err := s.answerRepo.Create(ctx, row); err != nil {
+			sendError(room, c, "failed to save answer")
+			return
+		}
+	case err == nil:
+		// Subsequent submission — append to the existing array (or migrate
+		// from a legacy single-string answer).
+		phrases := decodeWordCloudPhrases(existing.Answer)
+		if len(phrases) >= maxPhrases {
+			sendError(room, c, "достигнут лимит ответов")
+			return
+		}
+		phrases = append(phrases, display)
+		payload, _ := json.Marshal(phrases)
+		if err := s.answerRepo.UpdateAnswerPayload(ctx, existing.ID, payload); err != nil {
+			sendError(room, c, "failed to save answer")
+			return
+		}
+	default:
+		sendError(room, c, "internal error")
+		return
+	}
+
+	// Increment the in-memory cloud with this single phrase (NOT split on spaces).
+	room.AddWordCloudPhrase(key, display)
+
+	// Each submission counts toward the answer counter so the host's "ответов"
+	// header keeps climbing — matches what the participant UI already shows.
+	count, avgMs := room.IncrementAnswerCount(responseTimeMs)
+	total := room.ParticipantCount()
+
+	if msg, err := ws.NewEnvelope(ws.MsgTypeAnswerAccepted, ws.AnswerAcceptedData{
+		QuestionID: questionID,
+		Score:      0,
+	}); err == nil {
+		room.SendToClient(c, msg)
+	}
+	if msg, err := ws.NewEnvelope(ws.MsgTypeAnswerCount, ws.AnswerCountData{
+		Answered:      count,
+		Total:         total,
+		ParticipantID: participantID,
+		AvgResponseMs: avgMs,
+	}); err == nil {
+		room.SendToOrganizer(msg)
+	}
+
+	topWords := room.WordCloudTopWords(100)
+	if msg, err := ws.NewEnvelope(ws.MsgTypeWordcloudUpdate, ws.WordcloudUpdateData{Words: topWords}); err == nil {
+		room.SendToOrganizer(msg)
+	}
+
+	slog.Debug("word cloud phrase submitted",
+		"participant_id", participantID,
+		"question_id", questionID,
+		"phrase", display,
+		"answered", count, "total", total)
+}
+
+// decodeWordCloudPhrases reads a stored word_cloud answer in either of the
+// two shapes the column may hold:
+//   - new format: JSON array of strings (`["go", "ai"]`)
+//   - legacy:     a single JSON string from before multi-submit was supported
+//
+// Returns an empty slice for nil/invalid payloads so the caller can simply
+// append to it.
+func decodeWordCloudPhrases(raw interface{}) []string {
+	bytes := answerRawBytes(raw)
+	if len(bytes) == 0 {
+		return nil
+	}
+	var arr []string
+	if err := json.Unmarshal(bytes, &arr); err == nil {
+		return arr
+	}
+	var single string
+	if err := json.Unmarshal(bytes, &single); err == nil && single != "" {
+		return []string{single}
+	}
+	return nil
 }
 
 // computeIsCorrect evaluates whether the given raw answer is correct for the question.
@@ -1215,9 +1335,15 @@ func (s *conductService) ReplayStateForClient(c *ws.Client, room *ws.Room) {
 			room.SendToClient(c, msg)
 		}
 
-		// Word_cloud allows multiple submissions and uses no answerSubmitted state
-		// on the client — skip the replay there.
-		if c.Role() == ws.RoleParticipant && q.Type != "word_cloud" {
+		// Word_cloud accepts many phrases per participant and the client
+		// never enters an "answer submitted" terminal state — skip the
+		// answer_accepted replay there. Instead, replay the cloud snapshot
+		// (organizer only) so the chart isn't empty after a refresh.
+		if q.Type == "word_cloud" {
+			if c.Role() == ws.RoleOrganizer {
+				s.replayWordCloud(ctx, c, room, q.ID, session.ID)
+			}
+		} else if c.Role() == ws.RoleParticipant {
 			s.replayParticipantAnswer(ctx, c, room, q.ID)
 		}
 		return
@@ -1241,6 +1367,12 @@ func (s *conductService) ReplayStateForClient(c *ws.Client, room *ws.Room) {
 		room.SendToClient(c, msg)
 	}
 
+	// Word cloud also has its own dedicated visualization — replay it for
+	// the organizer so the cloud shows up on the results screen too.
+	if q.Type == "word_cloud" && c.Role() == ws.RoleOrganizer {
+		s.replayWordCloud(ctx, c, room, q.ID, session.ID)
+	}
+
 	if c.Role() == ws.RoleParticipant && q.Type != "word_cloud" {
 		s.replayParticipantAnswer(ctx, c, room, q.ID)
 	}
@@ -1248,6 +1380,43 @@ func (s *conductService) ReplayStateForClient(c *ws.Client, room *ws.Room) {
 	// Send leaderboard last — this is what flips the host UI into
 	// showing_results, after question_end + results have populated state.
 	s.sendLeaderboardSnapshot(ctx, c, room, session.ID)
+}
+
+// replayWordCloud sends a wordcloud_update snapshot to one client. If the
+// in-memory map is empty (e.g. the room was just rebuilt after a server
+// restart), it rebuilds the per-question cloud from the answers table first
+// so the snapshot is accurate.
+func (s *conductService) replayWordCloud(ctx context.Context, c *ws.Client, room *ws.Room, questionID, sessionID uuid.UUID) {
+	if len(room.WordCloudTopWords(1)) == 0 {
+		// In-memory cloud is empty — rebuild from DB before sending.
+		answers, err := s.answerRepo.ListByQuestion(ctx, questionID, sessionID)
+		if err == nil && len(answers) > 0 {
+			rebuilt := make(map[string]struct {
+				Display string
+				Count   int
+			})
+			for _, a := range answers {
+				for _, phrase := range decodeWordCloudPhrases(a.Answer) {
+					trimmed := strings.TrimSpace(phrase)
+					key := normalize.Text(trimmed)
+					if key == "" {
+						continue
+					}
+					entry := rebuilt[key]
+					if entry.Display == "" {
+						entry.Display = trimmed
+					}
+					entry.Count++
+					rebuilt[key] = entry
+				}
+			}
+			room.SetWordCloudPhrases(rebuilt)
+		}
+	}
+	topWords := room.WordCloudTopWords(100)
+	if msg, err := ws.NewEnvelope(ws.MsgTypeWordcloudUpdate, ws.WordcloudUpdateData{Words: topWords}); err == nil {
+		room.SendToClient(c, msg)
+	}
 }
 
 // replayParticipantAnswer sends an answer_accepted envelope to the participant
@@ -1372,8 +1541,20 @@ func computeAnswerDistribution(answers []model.Answer, questionType string) map[
 			for _, idx := range indices {
 				counts[strconv.Itoa(idx)]++
 			}
+		case "word_cloud":
+			// Stored as a JSON array of phrases (one row per participant,
+			// growing on each submit). Aggregate case-insensitively but key
+			// the result by the original casing of the first occurrence so
+			// it lines up with what the cloud renders.
+			for _, phrase := range decodeWordCloudPhrases(raw) {
+				k := normalize.Text(phrase)
+				if k == "" {
+					continue
+				}
+				counts[strings.TrimSpace(phrase)]++
+			}
 		default:
-			// open_text / word_cloud / brainstorm — answer is a JSON string.
+			// open_text / brainstorm — answer is a JSON string.
 			var text string
 			if err := json.Unmarshal(raw, &text); err == nil {
 				counts[text]++

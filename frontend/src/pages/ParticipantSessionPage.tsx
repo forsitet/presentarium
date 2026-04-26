@@ -660,8 +660,8 @@ function WordCloudInput({
       {submittedWords.length >= maxWords ? (
         <div className="bg-white/20 backdrop-blur rounded-2xl p-6 text-center text-white">
           <div className="text-3xl mb-2">✓</div>
-          <p className="text-lg font-bold">Все слова отправлены!</p>
-          <p className="text-white/70 text-sm mt-1">Вы отправили {maxWords} слов</p>
+          <p className="text-lg font-bold">Все ответы отправлены!</p>
+          <p className="text-white/70 text-sm mt-1">Вы отправили {maxWords} ответов</p>
         </div>
       ) : (
         <>
@@ -671,8 +671,8 @@ function WordCloudInput({
               value={value}
               onChange={(e) => onChange(e.target.value)}
               onKeyDown={handleKeyDown}
-              maxLength={50}
-              placeholder="Введите слово..."
+              maxLength={80}
+              placeholder="Введите слово или фразу..."
               className="flex-1 rounded-xl bg-white/10 text-white placeholder-white/40 border border-white/20 px-4 py-3 text-lg focus:outline-none focus:border-white/60"
               autoFocus
             />
@@ -685,7 +685,7 @@ function WordCloudInput({
             </button>
           </div>
           <p className="text-white/40 text-xs text-center">
-            {submittedWords.length} / {maxWords} слов отправлено
+            {submittedWords.length} / {maxWords} ответов отправлено · можно вводить фразу из нескольких слов
           </p>
         </>
       )}
