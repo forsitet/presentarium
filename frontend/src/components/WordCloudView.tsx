@@ -1,5 +1,4 @@
-import { Component, type ReactNode, useRef, useState, useLayoutEffect } from 'react'
-import ReactWordcloud from 'react-wordcloud'
+import { useMemo, useRef, useState, useLayoutEffect } from 'react'
 
 interface WordEntry {
   text: string
@@ -15,75 +14,54 @@ interface WordCloudViewProps {
   fullScreen?: boolean
 }
 
-// Mentimeter-style cloud: a single indigo hue across all phrases (popularity
-// is communicated entirely by font size), a tight layout that fills the box,
-// and a strictly horizontal orientation. We pass a few near-identical shades
-// of indigo so adjacent same-size phrases can be told apart, but the overall
-// impression is monochrome.
-const WC_COLORS = ['#3b5bb8', '#4f46e5', '#4338ca', '#4c5bc6']
+// A small palette of near-identical indigo shades. Popularity is communicated
+// by font size; the colour variation just keeps neighbouring same-size phrases
+// from blurring into one another.
+const PALETTE = ['#3b5bb8', '#4f46e5', '#4338ca', '#4c5bc6', '#6366f1']
 
-const WC_OPTIONS = {
-  fontSizes: [14, 72] as [number, number],
-  rotations: 0,
-  rotationAngles: [0, 0] as [number, number],
-  fontFamily: 'Inter, system-ui, sans-serif',
-  fontWeight: '600' as const,
-  deterministic: true,
-  padding: 2,
-  scale: 'sqrt' as const, // softens the size jump between rare and popular phrases
-  spiral: 'archimedean' as const,
-  colors: WC_COLORS,
-  enableTooltip: true,
-  tooltipOptions: {},
-  transitionDuration: 600, // smooth re-layout when new answers arrive
-}
-
-const WC_OPTIONS_FULL = {
-  ...WC_OPTIONS,
-  fontSizes: [20, 120] as [number, number],
-  padding: 3,
-}
-
-/* ---------- Error Boundary for react-wordcloud ---------- */
-
-interface EBProps {
-  fallback: ReactNode
-  children: ReactNode
-}
-interface EBState {
-  hasError: boolean
-}
-
-class WordCloudErrorBoundary extends Component<EBProps, EBState> {
-  state: EBState = { hasError: false }
-
-  static getDerivedStateFromError(): EBState {
-    return { hasError: true }
+// stableHash gives each phrase a deterministic colour index — same phrase
+// always keeps the same shade as new submissions arrive.
+function stableHash(s: string): number {
+  let h = 0
+  for (let i = 0; i < s.length; i++) {
+    h = (h * 31 + s.charCodeAt(i)) | 0
   }
-
-  render() {
-    if (this.state.hasError) return this.props.fallback
-    return this.props.children
-  }
+  return Math.abs(h)
 }
 
-/* ---------- Chip-based fallback when cloud crashes ---------- */
+interface LaidOutWord {
+  text: string
+  count: number
+  fontSize: number
+  color: string
+}
 
-function WordChipsFallback({ words }: { words: { text: string; value: number }[] }) {
-  return (
-    <div className="h-full flex flex-wrap items-center justify-center gap-2 p-4 overflow-y-auto">
-      {words.map((w) => (
-        <span
-          key={w.text}
-          className="px-3 py-1 rounded-full font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200"
-          style={{ fontSize: `${Math.min(12 + w.value * 2, 28)}px` }}
-        >
-          {w.text}
-          <span className="ml-1 opacity-60 text-xs">{w.value}</span>
-        </span>
-      ))}
-    </div>
-  )
+/**
+ * Compute font size + colour for each phrase. Sizes are sqrt-scaled between
+ * `min` and `max` so the difference between count=1 and count=2 is visible
+ * but doesn't crowd out the rest of the cloud at high counts.
+ */
+function layout(words: WordEntry[], min: number, max: number): LaidOutWord[] {
+  if (words.length === 0) return []
+  const counts = words.map((w) => w.count)
+  const lo = Math.min(...counts)
+  const hi = Math.max(...counts)
+  const range = Math.max(1, hi - lo)
+
+  return words
+    .slice()
+    .sort((a, b) => b.count - a.count) // largest first → React layout puts them near the centre
+    .map((w) => {
+      // sqrt-scale so a single popular phrase doesn't dominate the whole box.
+      const t = Math.sqrt((w.count - lo) / range) // 0..1
+      const fontSize = min + (max - min) * t
+      return {
+        text: w.text,
+        count: w.count,
+        fontSize,
+        color: PALETTE[stableHash(w.text) % PALETTE.length],
+      }
+    })
 }
 
 /* ---------- Main component ---------- */
@@ -96,18 +74,25 @@ export function WordCloudView({
   fullScreen = false,
 }: WordCloudViewProps) {
   const containerRef = useRef<HTMLDivElement>(null)
-  const [cloudSize, setCloudSize] = useState<[number, number]>([560, 256])
+  const [fontRange, setFontRange] = useState<[number, number]>(
+    fullScreen ? [22, 88] : [16, 56],
+  )
 
-  // Measure the container once it mounts (and on resize) so the cloud fills it.
+  // Pick a font-size range that scales with the actual cloud area so phrases
+  // fill the box on a 4K screen but don't overflow on a phone.
   useLayoutEffect(() => {
-    if (!fullScreen || !containerRef.current) return
+    if (!containerRef.current) return
     const measure = () => {
-      if (containerRef.current) {
-        const { width, height } = containerRef.current.getBoundingClientRect()
-        if (width > 0 && height > 0) {
-          setCloudSize([Math.floor(width), Math.floor(height)])
-        }
-      }
+      const el = containerRef.current
+      if (!el) return
+      const { width, height } = el.getBoundingClientRect()
+      if (width <= 0 || height <= 0) return
+      // Heuristic: the largest phrase should be roughly 1/4 of the smaller
+      // dimension of the box. Clamp to keep readability everywhere.
+      const small = Math.min(width, height)
+      const max = Math.max(28, Math.min(140, Math.floor(small / 4)))
+      const min = Math.max(14, Math.floor(max / 4))
+      setFontRange([min, max])
     }
     measure()
     const ro = new ResizeObserver(measure)
@@ -115,47 +100,52 @@ export function WordCloudView({
     return () => ro.disconnect()
   }, [fullScreen])
 
-  const visibleWords = words
-    .filter((w) => !hiddenWords.has(w.text))
-    .map((w) => ({ text: w.text, value: Math.max(w.count, 1) })) // ensure positive values
-    .filter((w) => w.text.trim().length > 0) // filter out empty strings
+  const visibleWords = useMemo(
+    () =>
+      words
+        .filter((w) => !hiddenWords.has(w.text) && w.text.trim().length > 0),
+    [words, hiddenWords],
+  )
 
-  if (words.length === 0) {
-    return (
-      <div
-        className={`flex items-center justify-center rounded-xl bg-slate-50 border border-slate-200 text-slate-500 text-sm ${
-          fullScreen ? 'h-full' : 'h-48'
-        }`}
-      >
-        Ждём ответов участников...
-      </div>
-    )
-  }
+  const laidOut = useMemo(
+    () => layout(visibleWords, fontRange[0], fontRange[1]),
+    [visibleWords, fontRange],
+  )
 
   const cloudHeight = fullScreen ? 'flex-1 min-h-[300px]' : 'h-64'
-  const options = fullScreen ? WC_OPTIONS_FULL : WC_OPTIONS
-  const size: [number, number] = fullScreen ? cloudSize : [560, 256]
 
   return (
     <div className={`flex flex-col gap-4 ${fullScreen ? 'h-full' : ''}`}>
-      {/* Word cloud visualization — Mentimeter-style: light surface, single
-          indigo hue, all phrases horizontal so multi-word answers stay
-          readable end-to-end. */}
+      {/* Word cloud — Mentimeter-style: light surface, single hue family,
+          horizontal-only, packed via flex-wrap so multi-word phrases like
+          "искусственный интеллект" stay on one line. */}
       <div
         ref={containerRef}
-        className={`${cloudHeight} w-full bg-slate-50 border border-slate-200 rounded-xl overflow-hidden`}
+        className={`${cloudHeight} w-full rounded-xl bg-slate-50 border border-slate-200 overflow-hidden`}
       >
-        {visibleWords.length > 0 ? (
-          <WordCloudErrorBoundary fallback={<WordChipsFallback words={visibleWords} />}>
-            <ReactWordcloud
-              words={visibleWords}
-              options={options}
-              size={size}
-            />
-          </WordCloudErrorBoundary>
-        ) : (
+        {words.length === 0 ? (
+          <div className="h-full flex items-center justify-center text-slate-500 text-sm">
+            Ждём ответов участников...
+          </div>
+        ) : laidOut.length === 0 ? (
           <div className="h-full flex items-center justify-center text-slate-500 text-sm">
             Все слова скрыты
+          </div>
+        ) : (
+          <div className="h-full w-full flex flex-wrap items-center justify-center content-center gap-x-6 gap-y-2 px-6 py-4 overflow-hidden">
+            {laidOut.map((w) => (
+              <span
+                key={w.text}
+                className="leading-tight font-bold whitespace-nowrap transition-all duration-500"
+                style={{
+                  fontSize: `${w.fontSize}px`,
+                  color: w.color,
+                }}
+                title={`${w.text} · ${w.count}`}
+              >
+                {w.text}
+              </span>
+            ))}
           </div>
         )}
       </div>
