@@ -31,8 +31,8 @@ func NewPostgresPollRepo(db *sqlx.DB) PollRepository {
 }
 
 func (r *postgresPollRepo) Create(ctx context.Context, poll *model.Poll) error {
-	query := `INSERT INTO polls (id, user_id, title, description, scoring_rule, question_order, created_at, updated_at)
-              VALUES (:id, :user_id, :title, :description, :scoring_rule, :question_order, :created_at, :updated_at)`
+	query := `INSERT INTO polls (id, user_id, title, description, scoring_rule, question_order, show_answer_distribution, created_at, updated_at)
+              VALUES (:id, :user_id, :title, :description, :scoring_rule, :question_order, :show_answer_distribution, :created_at, :updated_at)`
 	_, err := r.db.NamedExecContext(ctx, query, poll)
 	return err
 }
@@ -61,7 +61,8 @@ func (r *postgresPollRepo) ListByUser(ctx context.Context, userID uuid.UUID) ([]
 
 func (r *postgresPollRepo) Update(ctx context.Context, poll *model.Poll) error {
 	query := `UPDATE polls SET title=:title, description=:description,
-              scoring_rule=:scoring_rule, question_order=:question_order, updated_at=:updated_at
+              scoring_rule=:scoring_rule, question_order=:question_order,
+              show_answer_distribution=:show_answer_distribution, updated_at=:updated_at
               WHERE id=:id`
 	res, err := r.db.NamedExecContext(ctx, query, poll)
 	if err != nil {

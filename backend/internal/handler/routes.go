@@ -67,9 +67,20 @@ func NewRouter(deps RouterDeps) http.Handler {
 	}
 
 	// Wire WS join/leave hooks so the participant service manages DB records.
+	// On join we also let the conduct service replay the live session state
+	// (current question, timer, leaderboard, …) so a freshly-(re)connected
+	// client resumes mid-session instead of landing on the waiting screen.
 	if deps.WSHandler != nil && deps.ParticipantService != nil {
+		participantOnJoin := deps.ParticipantService.OnJoin
+		conductSvc := deps.ConductService
+		onJoin := func(c *ws.Client, room *ws.Room) {
+			participantOnJoin(c, room)
+			if conductSvc != nil {
+				conductSvc.ReplayStateForClient(c, room)
+			}
+		}
 		deps.WSHandler.SetJoinLeaveHandlers(
-			deps.ParticipantService.OnJoin,
+			onJoin,
 			deps.ParticipantService.OnLeave,
 		)
 	}

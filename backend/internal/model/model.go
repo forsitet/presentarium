@@ -58,14 +58,15 @@ type User struct {
 
 // Poll represents a quiz/poll created by a user.
 type Poll struct {
-	ID            uuid.UUID `db:"id"             json:"id"`
-	UserID        uuid.UUID `db:"user_id"        json:"user_id"`
-	Title         string    `db:"title"          json:"title"`
-	Description   string    `db:"description"    json:"description"`
-	ScoringRule   string    `db:"scoring_rule"   json:"scoring_rule"`
-	QuestionOrder string    `db:"question_order" json:"question_order"`
-	CreatedAt     time.Time `db:"created_at"     json:"created_at"`
-	UpdatedAt     time.Time `db:"updated_at"     json:"updated_at"`
+	ID                     uuid.UUID `db:"id"                       json:"id"`
+	UserID                 uuid.UUID `db:"user_id"                  json:"user_id"`
+	Title                  string    `db:"title"                    json:"title"`
+	Description            string    `db:"description"              json:"description"`
+	ScoringRule            string    `db:"scoring_rule"             json:"scoring_rule"`
+	QuestionOrder          string    `db:"question_order"           json:"question_order"`
+	ShowAnswerDistribution bool      `db:"show_answer_distribution" json:"show_answer_distribution"`
+	CreatedAt              time.Time `db:"created_at"               json:"created_at"`
+	UpdatedAt              time.Time `db:"updated_at"               json:"updated_at"`
 }
 
 // Question represents a question inside a poll.
