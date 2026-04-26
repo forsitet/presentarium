@@ -57,7 +57,11 @@ type Room struct {
 	clients         map[*Client]bool
 	organizer       *Client
 	currentQuestion *ActiveQuestion
-	stopTimer       chan struct{}
+	// lastQuestion holds the most recently finished question so reconnecting
+	// clients can be re-rendered into the showing_results screen even though
+	// currentQuestion has been cleared by TryFinishQuestion.
+	lastQuestion *ActiveQuestion
+	stopTimer    chan struct{}
 	answerCount        int            // number of answers received for the current question
 	totalResponseMs    int            // sum of response times in ms (for average calculation)
 	wordCloudFreq      map[string]int // per-question word frequency for word_cloud questions
@@ -271,10 +275,20 @@ func (r *Room) TryFinishQuestion(questionID uuid.UUID) bool {
 	if r.currentQuestion == nil || r.currentQuestion.ID != questionID {
 		return false
 	}
+	r.lastQuestion = r.currentQuestion
 	r.currentQuestion = nil
 	r.stopTimer = nil
 	r.state = StateShowingResults
 	return true
+}
+
+// LastQuestion returns the most recently finished question, or nil if no
+// question has been shown yet. Used to replay state to reconnecting clients
+// during the showing_results phase.
+func (r *Room) LastQuestion() *ActiveQuestion {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.lastQuestion
 }
 
 // ResetAnswerCount resets the in-memory answer counter and response time tracking for a new question.

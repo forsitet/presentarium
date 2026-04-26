@@ -184,6 +184,12 @@ export function ParticipantSessionPage() {
     const onAnswerAccepted = (data: unknown) => {
       const d = data as { score: number; is_correct?: boolean | null }
       setAnswerResult({ score: d.score, is_correct: d.is_correct })
+      // On reconnect/refresh the server replays answer_accepted so the UI knows
+      // we already submitted; setting answerSubmitted here covers that case.
+      // For normal flow it's redundant (the submit handlers also set it true).
+      // word_cloud allows multiple submissions; the render guard already
+      // accounts for that, so flipping the flag is harmless there.
+      setAnswerSubmitted(true)
       totalScoreRef.current += d.score
       if (d.score > 0) {
         scorePopupKey.current += 1
