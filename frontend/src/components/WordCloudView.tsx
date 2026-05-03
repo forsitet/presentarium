@@ -14,20 +14,20 @@ interface WordCloudViewProps {
   fullScreen?: boolean
 }
 
-// Vibrant multi-hue palette — popularity is communicated by font size, the
-// colour variety keeps the cloud looking lively (kavgan-style) instead of
-// reading as a flat block of one colour.
+// Vibrant multi-hue palette tuned for dark host UI — popularity is
+// communicated by font size, the colour variety keeps the cloud looking
+// lively (kavgan-style) instead of reading as a flat block of one colour.
 const PALETTE = [
-  '#dc2626', // red-600
-  '#2563eb', // blue-600
-  '#16a34a', // green-600
-  '#9333ea', // purple-600
-  '#d97706', // amber-600
-  '#0891b2', // cyan-600
-  '#db2777', // pink-600
-  '#0d9488', // teal-600
-  '#ca8a04', // yellow-600
-  '#7c3aed', // violet-600
+  '#f87171', // red-400
+  '#60a5fa', // blue-400
+  '#4ade80', // green-400
+  '#c084fc', // purple-400
+  '#fbbf24', // amber-400
+  '#22d3ee', // cyan-400
+  '#f472b6', // pink-400
+  '#2dd4bf', // teal-400
+  '#facc15', // yellow-400
+  '#a78bfa', // violet-400
 ]
 
 // Exponent for the count-to-fontSize mapping. > 1 ⇒ only top phrases approach
@@ -62,6 +62,9 @@ interface LaidOutWord {
  * close to `min` and only top entries approach `max` — that's what produces
  * the kavgan-style dynamic contrast where one popular phrase visibly
  * dominates instead of every word being roughly the same size.
+ *
+ * Returns phrases sorted by size descending — call `distributeRows` to
+ * turn the list into a multi-row layout.
  */
 function layout(words: WordEntry[], min: number, max: number): LaidOutWord[] {
   if (words.length === 0) return []
@@ -72,7 +75,7 @@ function layout(words: WordEntry[], min: number, max: number): LaidOutWord[] {
 
   return words
     .slice()
-    .sort((a, b) => b.count - a.count) // largest first → React layout puts them near the centre
+    .sort((a, b) => b.count - a.count)
     .map((w) => {
       const linearT = (w.count - lo) / range // 0..1, equal counts → 0
       const t = Math.pow(linearT, SIZE_EXPONENT)
@@ -84,6 +87,41 @@ function layout(words: WordEntry[], min: number, max: number): LaidOutWord[] {
         color: PALETTE[stableHash(w.text) % PALETTE.length],
       }
     })
+}
+
+/**
+ * Spread phrases across multiple rows so the cloud always reads as 2D —
+ * a plain flex-wrap collapses to one line whenever the few phrases happen
+ * to fit horizontally, which kills the visual richness.
+ *
+ * Algorithm:
+ *   1. Pick a row count proportional to total phrases (1..5).
+ *   2. Walk the size-sorted list and round-robin into rows. This puts the
+ *      biggest phrase into row 0, the next biggest into row 1, etc., so
+ *      every row carries a similar visual weight.
+ *   3. Inside each row, place the largest phrase in the centre and
+ *      alternate left/right for the rest. Mimics the natural "weighty
+ *      middle" look word clouds usually have.
+ */
+function distributeRows(sized: LaidOutWord[]): LaidOutWord[][] {
+  if (sized.length === 0) return []
+  const rowCount = Math.min(5, Math.max(1, Math.ceil(sized.length / 3)))
+
+  const buckets: LaidOutWord[][] = Array.from({ length: rowCount }, () => [])
+  for (let i = 0; i < sized.length; i++) {
+    buckets[i % rowCount].push(sized[i])
+  }
+
+  return buckets.map((row) => {
+    // row arrived size-sorted desc by virtue of the round-robin walk;
+    // re-arrange so the biggest sits in the middle of the row.
+    const out: LaidOutWord[] = []
+    for (let i = 0; i < row.length; i++) {
+      if (i % 2 === 0) out.push(row[i])
+      else out.unshift(row[i])
+    }
+    return out
+  })
 }
 
 /* ---------- Main component ---------- */
@@ -134,39 +172,49 @@ export function WordCloudView({
     [visibleWords, fontRange],
   )
 
+  const rows = useMemo(() => distributeRows(laidOut), [laidOut])
+
   const cloudHeight = fullScreen ? 'flex-1 min-h-[300px]' : 'h-64'
 
   return (
     <div className={`flex flex-col gap-4 ${fullScreen ? 'h-full' : ''}`}>
-      {/* Word cloud — Mentimeter-style: light surface, single hue family,
-          horizontal-only, packed via flex-wrap so multi-word phrases like
-          "искусственный интеллект" stay on one line. */}
+      {/* Word cloud — kavgan-style: dark surface, vibrant multi-hue palette,
+          guaranteed multi-row layout via distributeRows so the cloud reads
+          as 2D even with few phrases. flex-wrap inside each row keeps
+          multi-word phrases ("искусственный интеллект") whole. */}
       <div
         ref={containerRef}
-        className={`${cloudHeight} w-full rounded-xl bg-slate-50 border border-slate-200 overflow-hidden`}
+        className={`${cloudHeight} w-full rounded-xl bg-gray-800/40 border border-gray-700/50 overflow-hidden`}
       >
         {words.length === 0 ? (
-          <div className="h-full flex items-center justify-center text-slate-500 text-sm">
+          <div className="h-full flex items-center justify-center text-gray-500 text-sm">
             Ждём ответов участников...
           </div>
-        ) : laidOut.length === 0 ? (
-          <div className="h-full flex items-center justify-center text-slate-500 text-sm">
+        ) : rows.length === 0 ? (
+          <div className="h-full flex items-center justify-center text-gray-500 text-sm">
             Все слова скрыты
           </div>
         ) : (
-          <div className="h-full w-full flex flex-wrap items-center justify-center content-center gap-x-6 gap-y-2 px-6 py-4 overflow-hidden">
-            {laidOut.map((w) => (
-              <span
-                key={w.text}
-                className="leading-tight font-bold whitespace-nowrap transition-all duration-500"
-                style={{
-                  fontSize: `${w.fontSize}px`,
-                  color: w.color,
-                }}
-                title={`${w.text} · ${w.count}`}
+          <div className="h-full w-full flex flex-col items-stretch justify-center gap-y-3 px-6 py-4 overflow-hidden">
+            {rows.map((row, rowIdx) => (
+              <div
+                key={rowIdx}
+                className="flex flex-wrap items-center justify-center gap-x-5 gap-y-1"
               >
-                {w.text}
-              </span>
+                {row.map((w) => (
+                  <span
+                    key={w.text}
+                    className="leading-tight font-bold whitespace-nowrap transition-all duration-500"
+                    style={{
+                      fontSize: `${w.fontSize}px`,
+                      color: w.color,
+                    }}
+                    title={`${w.text} · ${w.count}`}
+                  >
+                    {w.text}
+                  </span>
+                ))}
+              </div>
             ))}
           </div>
         )}
