@@ -54,9 +54,12 @@ export function BrainstormBoard({
     }
 
     const onAnswerHidden = (data: unknown) => {
-      const { id, is_hidden } = data as { id: string; is_hidden: boolean }
+      const { idea_id, is_hidden } = data as {
+        idea_id: string
+        is_hidden: boolean
+      }
       setIdeas((prev) =>
-        prev.map((i) => (i.id === id ? { ...i, is_hidden } : i))
+        prev.map((i) => (i.id === idea_id ? { ...i, is_hidden } : i))
       )
     }
 
