@@ -14,10 +14,28 @@ interface WordCloudViewProps {
   fullScreen?: boolean
 }
 
-// A small palette of near-identical indigo shades. Popularity is communicated
-// by font size; the colour variation just keeps neighbouring same-size phrases
-// from blurring into one another.
-const PALETTE = ['#3b5bb8', '#4f46e5', '#4338ca', '#4c5bc6', '#6366f1']
+// Vibrant multi-hue palette — popularity is communicated by font size, the
+// colour variety keeps the cloud looking lively (kavgan-style) instead of
+// reading as a flat block of one colour.
+const PALETTE = [
+  '#dc2626', // red-600
+  '#2563eb', // blue-600
+  '#16a34a', // green-600
+  '#9333ea', // purple-600
+  '#d97706', // amber-600
+  '#0891b2', // cyan-600
+  '#db2777', // pink-600
+  '#0d9488', // teal-600
+  '#ca8a04', // yellow-600
+  '#7c3aed', // violet-600
+]
+
+// Exponent for the count-to-fontSize mapping. > 1 ⇒ only top phrases approach
+// the max size; the long tail compresses near `min`. This is what gives the
+// cloud its "one big word stands out" look. ~1 ≈ linear (flat), 2 ≈ quadratic
+// (very dramatic). 1.8 is a sweet spot — top still dominates, tail stays
+// readable.
+const SIZE_EXPONENT = 1.8
 
 // stableHash gives each phrase a deterministic colour index — same phrase
 // always keeps the same shade as new submissions arrive.
@@ -37,9 +55,13 @@ interface LaidOutWord {
 }
 
 /**
- * Compute font size + colour for each phrase. Sizes are sqrt-scaled between
- * `min` and `max` so the difference between count=1 and count=2 is visible
- * but doesn't crowd out the rest of the cloud at high counts.
+ * Compute font size + colour for each phrase.
+ *
+ * Sizes use a power-curve scaling (`t ** SIZE_EXPONENT`) between `min` and
+ * `max`. With SIZE_EXPONENT > 1, the long tail of low-count phrases stays
+ * close to `min` and only top entries approach `max` — that's what produces
+ * the kavgan-style dynamic contrast where one popular phrase visibly
+ * dominates instead of every word being roughly the same size.
  */
 function layout(words: WordEntry[], min: number, max: number): LaidOutWord[] {
   if (words.length === 0) return []
@@ -52,8 +74,8 @@ function layout(words: WordEntry[], min: number, max: number): LaidOutWord[] {
     .slice()
     .sort((a, b) => b.count - a.count) // largest first → React layout puts them near the centre
     .map((w) => {
-      // sqrt-scale so a single popular phrase doesn't dominate the whole box.
-      const t = Math.sqrt((w.count - lo) / range) // 0..1
+      const linearT = (w.count - lo) / range // 0..1, equal counts → 0
+      const t = Math.pow(linearT, SIZE_EXPONENT)
       const fontSize = min + (max - min) * t
       return {
         text: w.text,
