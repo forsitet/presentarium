@@ -76,10 +76,13 @@ export function BrainstormInput({ questionId }: BrainstormInputProps) {
     }
 
     const onAnswerHidden = (data: unknown) => {
-      const { id, is_hidden } = data as { id: string; is_hidden: boolean }
+      const { idea_id, is_hidden } = data as {
+        idea_id: string
+        is_hidden: boolean
+      }
       if (is_hidden) {
-        setVotingIdeas((prev) => prev.filter((i) => i.id !== id))
-        setRankedIdeas((prev) => prev.filter((i) => i.id !== id))
+        setVotingIdeas((prev) => prev.filter((i) => i.id !== idea_id))
+        setRankedIdeas((prev) => prev.filter((i) => i.id !== idea_id))
       }
     }
 
