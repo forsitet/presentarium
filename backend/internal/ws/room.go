@@ -423,16 +423,14 @@ func (r *Room) SetWordCloudPhrases(entries map[string]struct {
 // pairs sorted by count desc then display asc for stability. n <= 0 → all.
 func (r *Room) WordCloudTopWords(n int) []WordcloudWord {
 	r.mu.RLock()
-	src := r.wordCloudPhrases
+	words := make([]WordcloudWord, 0, len(r.wordCloudPhrases))
+	for _, entry := range r.wordCloudPhrases {
+		words = append(words, WordcloudWord{Text: entry.Display, Count: entry.Count})
+	}
 	r.mu.RUnlock()
 
-	if len(src) == 0 {
+	if len(words) == 0 {
 		return []WordcloudWord{}
-	}
-
-	words := make([]WordcloudWord, 0, len(src))
-	for _, entry := range src {
-		words = append(words, WordcloudWord{Text: entry.Display, Count: entry.Count})
 	}
 
 	// Sort by count descending, then alphabetically for stability.
