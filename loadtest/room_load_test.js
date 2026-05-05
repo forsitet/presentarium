@@ -308,15 +308,10 @@ export function participant(data) {
   // local mutable state, so we redeclare here every iteration.
   const submittedAt = {} // qid → ms timestamp the submit_* was sent
   const acked = new Set() // qids that received answer_accepted exactly once
-  let lastQuestionEventAt = null // populated on connected / question_end
   let gotConnected = false
   let gotSessionEnd = false
 
   const wsRes = ws.connect(url, {}, (socket) => {
-    socket.on('open', () => {
-      lastQuestionEventAt = Date.now()
-    })
-
     socket.on('message', (raw) => {
       let msg
       try {
@@ -333,8 +328,11 @@ export function participant(data) {
         case 'question_start': {
           const qid = msg.data.question_id
           const qtype = msg.data.type
-          if (lastQuestionEventAt !== null) {
-            waitForQuestionMs.add(Date.now() - lastQuestionEventAt)
+          // sent_at_ms is the server-side timestamp when the broadcast was
+          // constructed; (Date.now() - sent_at_ms) is the actual delivery
+          // latency. Missing on per-client resync after reconnect.
+          if (typeof msg.data.sent_at_ms === 'number' && msg.data.sent_at_ms > 0) {
+            waitForQuestionMs.add(Date.now() - msg.data.sent_at_ms)
           }
 
           // Send the right submit message for the question type.
@@ -389,7 +387,6 @@ export function participant(data) {
           if (submittedAt[eqid] !== undefined && !acked.has(eqid)) {
             lostAnswers.add(1)
           }
-          lastQuestionEventAt = Date.now()
           break
         }
 

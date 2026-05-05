@@ -300,6 +300,7 @@ func (s *conductService) handleShowQuestion(c *ws.Client, room *ws.Room, env ws.
 		Points:       q.Points,
 		Position:     q.Position,
 		Total:        total,
+		SentAtMs:     time.Now().UnixMilli(),
 	}
 	if msg, err := ws.NewEnvelope(ws.MsgTypeQuestionStart, startData); err == nil {
 		room.Broadcast(msg)

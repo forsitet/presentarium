@@ -96,6 +96,11 @@ type QuestionStartData struct {
 	Points       int             `json:"points"`
 	Position     int             `json:"position"`
 	Total        int             `json:"total"`
+	// SentAtMs is the server-side unix-millisecond timestamp at which this
+	// broadcast was constructed. Clients can use it to measure delivery
+	// latency (Date.now() - sent_at_ms). Populated only on initial broadcast,
+	// not on per-client resync after reconnect.
+	SentAtMs int64 `json:"sent_at_ms,omitempty"`
 }
 
 // TimerTickData carries the remaining seconds for the current question.
