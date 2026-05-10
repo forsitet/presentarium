@@ -22,3 +22,14 @@ Thumbs.db
 .idea/
 .vscode/
 *.swp
+
+# Local notes / scratch
+.claude/
+prd.md
+PRD.md
+progress.md
+progress.txt
+prompt.md
+ralph.sh
+tasks.json
+
